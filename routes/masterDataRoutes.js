@@ -1,9 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const {
-  getAllStateData,
   getAllCategoriesData,
-  getAllChannelsData,
   getAllCitiesData,
   getAllSkusData,
   getAllPlantsData,
@@ -25,13 +23,16 @@ const {
   getDsModelsFeaturesData,
   getDsModelMetricsData,
   getFvaVsStatsData,
+
+  getAllSupplierData,
+  getAllSupplierLocationData
 } = require("../controllers/masterController");
 const service = require("../service/masterService");
 
 // Basic GET routes
-router.get("/getAllState", getAllStateData);
+router.get("/getAllSuppliers", getAllSupplierData);
 router.get("/getAllCategories", getAllCategoriesData);
-router.get("/getAllChannels", getAllChannelsData);
+router.get("/getAllSupplierLocation", getAllSupplierLocationData);
 router.get("/getAllCities", getAllCitiesData);
 router.get("/getAllSkus", getAllSkusData);
 router.get("/getAllPlants", getAllPlantsData);
@@ -47,14 +48,93 @@ router.get("/getAllAlerts", getAllAlertsAndErrorsData);
 router.get("/getAlertCount", getAlertCountData);
 router.put("/forecast-error/:id", updateAlertsStrikethroughController);
 
+router.get("/getSupplierSavings", async (req, res) => {
+  try {
+    const data = await service.getSupplierSavingsLast6Months();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// router.get("/getLineChart", async (req, res) => {
+//   try {
+//     const data = await service.getLineChart();
+//     res.json(data);
+//   } catch (err) {
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
+function isISODate(s) {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+router.post('/getLineChart', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body || {};
+
+    // Optional validation – if provided, they must be ISO dates
+    const payload = {};
+    if (startDate) {
+      if (!isISODate(startDate)) {
+        return res.status(400).json({ error: 'Invalid startDate. Use YYYY-MM-DD.' });
+      }
+      payload.startDate = startDate;
+    }
+    if (endDate) {
+      if (!isISODate(endDate)) {
+        return res.status(400).json({ error: 'Invalid endDate. Use YYYY-MM-DD.' });
+      }
+      payload.endDate = endDate;
+    }
+
+    // Optional ordering check if both present
+    if (payload.startDate && payload.endDate && payload.startDate > payload.endDate) {
+      return res.status(400).json({ error: 'startDate must be <= endDate.' });
+    }
+
+    const data = await service.getLineChart(payload); // service applies defaults if missing
+    res.json(data);
+  } catch (err) {
+    console.error('[POST] /getLineChart failed:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post("/getHeatMap", async (req, res) => {
+  try {
+    const data = await service.getHeatMap(req.body || {});
+    res.json(data);
+  } catch (err) {
+    console.error("GET HEATMAP failed:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/getAlerts", async (req, res) => {
+  try {
+    const data = await service.getAlerts();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+router.get("/getGlobalEvents", async (req, res) => {
+  try {
+    const data = await service.getGlobalEvents();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 // Get Routes for Compare Models
-router.get("/getDsModelData", getDsModelData);
-router.get("/getDsModelFeaturesData", getDsModelsFeaturesData);
-router.get("/getDsModelMetricsData", getDsModelMetricsData);
-router.get("/getFvaVsStatsData", getFvaVsStatsData);
+// router.get("/getDsModelData", getDsModelData);
+// router.get("/getDsModelFeaturesData", getDsModelsFeaturesData);
+// router.get("/getDsModelMetricsData", getDsModelMetricsData);
+// router.get("/getFvaVsStatsData", getFvaVsStatsData);
 
 // POST routes
-router.post("/forecast-test", getForecastDataController);
+// router.post("/forecast-test", getForecastDataController);
 
 // Relationship-based routes
 router.post("/states-by-country", async (req, res) => {
@@ -71,16 +151,30 @@ router.post("/states-by-country", async (req, res) => {
   }
 });
 
-router.post("/cities-by-states", async (req, res) => {
+router.post("/plants-by-states", async (req, res) => {
   try {
     const { stateIds } = req.body;
     if (!Array.isArray(stateIds) || stateIds.length === 0) {
       return res.json([]);
     }
-    const cities = await service.getCitiesByStates(stateIds);
-    res.json(cities);
+    const plants = await service.getPlantsByStates(stateIds);
+    res.json(plants);
   } catch (err) {
-    console.error("Error in /cities-by-states:", err);
+    console.error("Error in /plants-by-states:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/sku-by-plants", async (req, res) => {
+  try {
+    const { plantIds } = req.body;
+    if (!Array.isArray(plantIds) || plantIds.length === 0) {
+      return res.json([]);
+    }
+    const sku = await service.getSkuByPlants(plantIds);
+    res.json(sku);
+  } catch (err) {
+    console.error("Error in /sku-by-plants:", err);
     res.status(500).json({ error: err.message });
   }
 });

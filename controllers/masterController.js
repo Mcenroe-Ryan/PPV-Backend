@@ -1,17 +1,7 @@
 const { query } = require("../config/db"); // Adjust path if needed
 
 const {
-  // getAllCities,
-  // getAllPlants,
-  // getAllCategories,
-  // getAllSkus,
-  // getAllChannels,
-  // getAllDemandForecasts,
-  // getAllModels,
-  // getAllForecastData,
-  getAllState,
   getAllCategories,
-  getAllChannels,
   getAllCities,
   getAllPlants,
   getAllSkus,
@@ -31,12 +21,14 @@ const {
   getDsModels,
   getDsModelsFeatures,
   getDsModelMetrics,
-  getFvaVsStats
+  getFvaVsStats,
+  getAllSuppliers,
+  getAllSupplierLocation
 } = require("../service/masterService");
 
-const getAllStateData = async (req, res) => {
+const getAllSupplierData = async (req, res) => {
   try {
-    const result = await getAllState();
+    const result = await getAllSuppliers();
     res.json(result);
   } catch (err) {
     console.error("Database error:", err);
@@ -74,9 +66,9 @@ const getAllSkusData = async (req, res) => {
   }
 };
 
-const getAllChannelsData = async (req, res) => {
+const getAllSupplierLocationData = async (req, res) => {
   try {
-    const result = await getAllChannels();
+    const result = await getAllSupplierLocation();
     res.json(result);
   } catch (err) {
     console.error("Database error:", err);
@@ -296,10 +288,8 @@ const updateAlertsStrikethroughController = async (req, res) => {
 
 module.exports = {
   getAllCountriesData,
-  getAllStateData,
   getAllCitiesData,
   getAllCategoriesData,
-  getAllChannelsData,
   getAllSkusData,
   getAllPlantsData,
   fetchStates,
@@ -319,5 +309,8 @@ module.exports = {
   getDsModelData,
   getDsModelsFeaturesData,
   getDsModelMetricsData,
-  getFvaVsStatsData
+  getFvaVsStatsData,
+
+  getAllSupplierData,
+  getAllSupplierLocationData
 };

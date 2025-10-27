@@ -3,9 +3,9 @@ const dayjs = require("dayjs");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(customParseFormat);
 
-const getAllState = async () => {
+const getAllSuppliers = async () => {
   try {
-    const result = await query("select * from dim_state where country_id = 1");
+    const result = await query("select * from suppliers");
     return result.rows;
   } catch (err) {
     console.error("Database error:", err);
@@ -16,16 +16,6 @@ const getAllState = async () => {
 const getAllCities = async () => {
   try {
     const result = await query("select * from dim_city where state_id = 1");
-    return result.rows;
-  } catch (err) {
-    console.error("Database error:", err);
-    throw err;
-  }
-};
-
-const getAllCountries = async () => {
-  try {
-    const result = await query("select * from dim_country");
     return result.rows;
   } catch (err) {
     console.error("Database error:", err);
@@ -55,7 +45,7 @@ const getAllCategories = async () => {
 
 const getAllSkus = async () => {
   try {
-    const result = await query("select * from dim_sku where category_id = 2");
+    const result = await query("select * from skus");
     return result.rows;
   } catch (err) {
     console.error("Database error:", err);
@@ -63,12 +53,249 @@ const getAllSkus = async () => {
   }
 };
 
-const getAllChannels = async () => {
+const getAllSupplierLocation = async () => {
   try {
-    const result = await query("select * from dim_channel");
+    const result = await query("select * from supplier_plant_mapping");
     return result.rows;
   } catch (err) {
     console.error("Database error:", err);
+    throw err;
+  }
+};
+
+const getSupplierSavingsLast6Months = async () => {
+  const sql = `
+    SELECT
+      s.supplier_name,
+      SUM(pfm.ppv_variance_amount) AS total_savings_dollars
+    FROM ppv_forecast_monthly pfm
+    JOIN suppliers s ON pfm.supplier_id = s.supplier_id
+    WHERE pfm.forecast_month >= CURRENT_DATE - INTERVAL '6 months'
+    GROUP BY s.supplier_name
+    ORDER BY total_savings_dollars DESC;
+  `;
+  try {
+    const { rows } = await query(sql);
+    return rows;
+  } catch (err) {
+    console.error("Database error (getSupplierSavingsLast6Months):", err);
+    throw err;
+  }
+};
+
+// const getLineChart = async () => {
+//   const sql = `
+//   SELECT
+//     s.supplier_name,
+//     pfm.forecast_month,
+//     pfm.ppv_variance_percentage
+// FROM ppv_forecast_monthly pfm
+// JOIN suppliers s ON pfm.supplier_id = s.supplier_id
+// WHERE pfm.forecast_month BETWEEN '2023-10-01' AND '2025-09-01'
+// ORDER BY s.supplier_name, pfm.forecast_month;
+//   `;
+//   try {
+//     const { rows } = await query(sql);
+//     return rows;
+//   } catch (err) {
+//     console.error("Database error (getLineChart):", err);
+//     throw err;
+//   }
+// };
+const getLineChart = async ({ startDate, endDate }) => {
+  // fallback window if dates not provided
+  const start = startDate || "2023-10-01";
+  const end = endDate || "2025-09-01";
+
+  const sql = `
+    SELECT
+      s.supplier_name,
+      pfm.forecast_month,
+      pfm.ppv_variance_percentage
+    FROM ppv_forecast_monthly pfm
+    JOIN suppliers s ON pfm.supplier_id = s.supplier_id
+    WHERE pfm.forecast_month >= $1
+      AND pfm.forecast_month <= $2
+    ORDER BY s.supplier_name, pfm.forecast_month;
+  `;
+
+  try {
+    const { rows } = await query(sql, [start, end]);
+    return rows;
+  } catch (err) {
+    console.error("Database error (getLineChart):", err);
+    throw err;
+  }
+};
+
+const getAlerts = async () => {
+  const sql = `
+SELECT 
+    a.alert_id,
+    a.alert_type,
+    a.trigger_date AS date_value,
+    a.description AS tooltip,
+    a.severity,
+    s.supplier_name,
+    p.plant_name,
+    sk.sku_name,
+    CASE 
+        WHEN a.severity = 'Critical' THEN '🔴'
+        WHEN a.severity = 'Warning' THEN '🟠'
+        ELSE '🔵'
+    END AS marker_color_emoji
+FROM alerts a
+JOIN suppliers s ON a.supplier_id = s.supplier_id
+JOIN plants p ON a.plant_id = p.plant_id
+JOIN skus sk ON a.sku_id = sk.sku_id
+WHERE a.is_resolved = FALSE
+ORDER BY a.trigger_date DESC;
+  `;
+  try {
+    const { rows } = await query(sql);
+    return rows;
+  } catch (err) {
+    console.error("Database error (getLineChart):", err);
+    throw err;
+  }
+};
+
+const getGlobalEvents = async () => {
+  const sql = `
+SELECT 
+    ge.event_name AS label,
+    ge.event_date AS date_value,
+    ge.description AS tooltip,
+    ge.impact_level,
+    c.country_code AS country_flag, -- e.g., '🇺🇸' or '🇮🇳'
+    c.country_name
+FROM global_events ge
+JOIN countries c ON ge.country_id = c.country_id
+WHERE ge.is_active = TRUE
+ORDER BY ge.event_date DESC;
+  `;
+  try {
+    const { rows } = await query(sql);
+    return rows;
+  } catch (err) {
+    console.error("Database error (getLineChart):", err);
+    throw err;
+  }
+};
+
+// const getHeatMap = async () => {
+//   const sql = `
+// SELECT
+//     s.supplier_name,
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 10 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2023 THEN pfm.ppv_variance_percentage END) AS "Oct 2023",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 11 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2023 THEN pfm.ppv_variance_percentage END) AS "Nov 2023",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 12 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2023 THEN pfm.ppv_variance_percentage END) AS "Dec 2023",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 1 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Jan 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 2 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Feb 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 3 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Mar 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 4 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Apr 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 5 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "May 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 6 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Jun 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 7 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Jul 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 8 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Aug 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 9 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Sep 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 10 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Oct 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 11 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Nov 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 12 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Dec 2024",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 1 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Jan 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 2 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Feb 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 3 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Mar 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 4 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Apr 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 5 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "May 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 6 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Jun 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 7 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Jul 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 8 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Aug 2025",
+//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 9 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Sep 2025"
+// FROM ppv_forecast_monthly pfm
+// JOIN suppliers s ON pfm.supplier_id = s.supplier_id
+// WHERE pfm.forecast_month BETWEEN '2023-10-01' AND '2025-09-01'
+// GROUP BY s.supplier_name
+// ORDER BY s.supplier_name;
+//   `;
+//   try {
+//     const { rows } = await query(sql);
+//     return rows;
+//   } catch (err) {
+//     console.error("Database error (getLineChart):", err);
+//     throw err;
+//   }
+// };
+
+// Accepts: { startDate, endDate, countryIds, stateIds, plantIds, skuIds, supplierIds, supplierLocations }
+const getHeatMap = async (payload = {}) => {
+  const {
+    startDate,
+    endDate,
+    countryIds = [],
+    stateIds = [],
+    plantIds = [],
+    skuIds = [],
+    supplierIds = [],
+    supplierLocations = [], // array of country names (strings)
+  } = payload;
+
+  // sensible fallbacks if FE didn't send dates
+  const start = startDate || "2023-10-01";
+  const end = endDate || "2026-12-01";
+
+  // NOTE: adapt joins to your schema if country/state live elsewhere.
+  // The idea is to keep every filter optional.
+  const sql = `
+    SELECT
+      s.supplier_name,
+      pfm.forecast_month::date                         AS month_date,
+      to_char(pfm.forecast_month, 'Mon YYYY')          AS month_label,
+      pfm.ppv_variance_percentage::numeric             AS pct
+    FROM ppv_forecast_monthly pfm
+    JOIN suppliers s       ON s.supplier_id = pfm.supplier_id
+    LEFT JOIN plants   p   ON p.plant_id     = pfm.plant_id
+    LEFT JOIN states   st  ON st.state_id    = p.state_id
+    LEFT JOIN countries c  ON c.country_id   = st.country_id
+    WHERE pfm.forecast_month BETWEEN $1::date AND $2::date
+      AND (cardinality($3::int[]) = 0 OR c.country_id = ANY($3::int[]))
+      AND (cardinality($4::int[]) = 0 OR st.state_id  = ANY($4::int[]))
+      AND (cardinality($5::int[]) = 0 OR pfm.plant_id = ANY($5::int[]))
+      AND (cardinality($6::int[]) = 0 OR pfm.sku_id   = ANY($6::int[]))
+      AND (cardinality($7::int[]) = 0 OR pfm.supplier_id = ANY($7::int[]))
+      AND (cardinality($8::text[]) = 0 OR s.supplier_country = ANY($8::text[]))
+    ORDER BY s.supplier_name, pfm.forecast_month
+  `;
+
+  const params = [
+    start,
+    end,
+    countryIds,
+    stateIds,
+    plantIds,
+    skuIds,
+    supplierIds,
+    supplierLocations,
+  ];
+
+  try {
+    const { rows } = await query(sql, params);
+
+    // Pivot in Node: one object per supplier with dynamic "Mon YYYY" keys
+    const bySupplier = new Map();
+    for (const r of rows) {
+      if (!bySupplier.has(r.supplier_name)) {
+        bySupplier.set(r.supplier_name, { supplier_name: r.supplier_name });
+      }
+      const obj = bySupplier.get(r.supplier_name);
+      obj[r.month_label] = r.pct; // e.g., "Apr 2026": 6.5
+    }
+
+    // Return array of pivoted rows, sorted by supplier
+    return Array.from(bySupplier.values()).sort((a, b) =>
+      a.supplier_name.localeCompare(b.supplier_name)
+    );
+  } catch (err) {
+    console.error("Database error (getHeatMap):", err);
     throw err;
   }
 };
@@ -235,24 +462,44 @@ const getWeekForecastData = async (filters) => {
   return result.rows;
 };
 
+const getAllCountries = async () => {
+  try {
+    const result = await query("select * from countries");
+    return result.rows;
+  } catch (err) {
+    console.error("Database error:", err);
+    throw err;
+  }
+};
 // Get States by Country (accepts array of state_ids)
 const getStatesByCountry = async (countryIds) => {
   if (!countryIds || countryIds.length === 0) return [];
   const placeholders = countryIds.map((_, i) => `$${i + 1}`).join(", ");
   const result = await query(
-    `SELECT * FROM dim_state WHERE country_id IN (${placeholders})`,
+    `SELECT * FROM states WHERE country_id IN (${placeholders})`,
     countryIds
   );
   return result.rows;
 };
 
 // Get Cities by State (accepts array of state_ids)
-const getCitiesByStates = async (stateIds) => {
+const getPlantsByStates = async (stateIds) => {
   if (!stateIds || stateIds.length === 0) return [];
   const placeholders = stateIds.map((_, i) => `$${i + 1}`).join(", ");
   const result = await query(
-    `SELECT * FROM dim_city WHERE state_id IN (${placeholders})`,
+    `SELECT * FROM plants WHERE state_id IN (${placeholders})`,
     stateIds
+  );
+  return result.rows;
+};
+
+// Get Categories by Plant (accepts array of plant_ids)
+const getSkuByPlants = async (plantIds) => {
+  if (!plantIds || plantIds.length === 0) return [];
+  const placeholders = plantIds.map((_, i) => `$${i + 1}`).join(", ");
+  const result = await query(
+    `SELECT * FROM skus WHERE plant_id IN (${placeholders})`,
+    plantIds
   );
   return result.rows;
 };
@@ -264,17 +511,6 @@ const getPlantsByCities = async (cityIds) => {
   const result = await query(
     `SELECT * FROM dim_plant WHERE city_id IN (${placeholders})`,
     cityIds
-  );
-  return result.rows;
-};
-
-// Get Categories by Plant (accepts array of plant_ids)
-const getCategoriesByPlants = async (plantIds) => {
-  if (!plantIds || plantIds.length === 0) return [];
-  const placeholders = plantIds.map((_, i) => `$${i + 1}`).join(", ");
-  const result = await query(
-    `SELECT * FROM dim_category WHERE plant_id IN (${placeholders})`,
-    plantIds
   );
   return result.rows;
 };
@@ -520,12 +756,9 @@ const updateAlertsStrikethroughService = async (id, is_checked) => {
   return result.rows[0];
 };
 
-
 module.exports = {
   // demand_planning code
-  getAllState,
   getAllCategories,
-  getAllChannels,
   getAllCities,
   getAllPlants,
   getAllSkus,
@@ -535,9 +768,7 @@ module.exports = {
   getCategoriesByPlant,
   getSkusByCategory,
   getForecastData,
-  getCitiesByStates,
   getPlantsByCities,
-  getCategoriesByPlants,
   getSkusByCategories,
   updateConsensusForecast,
   getAllModels,
@@ -547,9 +778,19 @@ module.exports = {
   alertCountService,
   updateAlertsStrikethroughService,
   getWeekForecastData,
-//compare model 
+  //compare model
   getDsModels,
   getDsModelsFeatures,
   getDsModelMetrics,
   getFvaVsStats,
+
+  getPlantsByStates,
+  getSkuByPlants,
+  getAllSuppliers,
+  getAllSupplierLocation,
+  getSupplierSavingsLast6Months,
+  getLineChart,
+  getHeatMap,
+  getAlerts,
+  getGlobalEvents,
 };

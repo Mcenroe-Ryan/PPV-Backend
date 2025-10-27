@@ -4,7 +4,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
 const HOST = process.env.HOST || "0.0.0.0"; // Ensures it works on EC2
 
 const mainRoutes = require("./routes/masterDataRoutes");
