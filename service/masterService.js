@@ -83,25 +83,7 @@ const getSupplierSavingsLast6Months = async () => {
   }
 };
 
-// const getLineChart = async () => {
-//   const sql = `
-//   SELECT
-//     s.supplier_name,
-//     pfm.forecast_month,
-//     pfm.ppv_variance_percentage
-// FROM ppv_forecast_monthly pfm
-// JOIN suppliers s ON pfm.supplier_id = s.supplier_id
-// WHERE pfm.forecast_month BETWEEN '2023-10-01' AND '2025-09-01'
-// ORDER BY s.supplier_name, pfm.forecast_month;
-//   `;
-//   try {
-//     const { rows } = await query(sql);
-//     return rows;
-//   } catch (err) {
-//     console.error("Database error (getLineChart):", err);
-//     throw err;
-//   }
-// };
+
 const getLineChart = async ({ startDate, endDate }) => {
   // fallback window if dates not provided
   const start = startDate || "2023-10-01";
@@ -127,7 +109,46 @@ const getLineChart = async ({ startDate, endDate }) => {
     throw err;
   }
 };
+// const getLineChart = async ({ startDate, endDate, skuId, skuIds }) => {
+//   // fallback window if dates not provided
+//   const start = startDate || "2023-10-01";
+//   const end   = endDate   || "2025-09-01";
 
+//   const params = [start, end];
+//   const where = [
+//     `pfm.forecast_month >= $1`,
+//     `pfm.forecast_month <= $2`,
+//   ];
+
+//   // Optional SKU filters
+//   // Accept either a single skuId or an array skuIds
+//   if (Array.isArray(skuIds) && skuIds.length > 0) {
+//     params.push(skuIds.map(Number)); // ensure ints
+//     where.push(`pfm.sku_id = ANY($${params.length}::int[])`);
+//   } else if (skuId != null) {
+//     params.push(Number(skuId));
+//     where.push(`pfm.sku_id = $${params.length}::int`);
+//   }
+
+//   const sql = `
+//     SELECT
+//       s.supplier_name,
+//       pfm.forecast_month,
+//       pfm.ppv_variance_percentage
+//     FROM ppv_forecast_monthly pfm
+//     JOIN suppliers s ON pfm.supplier_id = s.supplier_id
+//     WHERE ${where.join(" AND ")}
+//     ORDER BY s.supplier_name, pfm.forecast_month;
+//   `;
+
+//   try {
+//     const { rows } = await query(sql, params);
+//     return rows;
+//   } catch (err) {
+//     console.error("Database error (getLineChart):", err);
+//     throw err;
+//   }
+// };
 const getAlerts = async () => {
   const sql = `
 SELECT 
@@ -182,6 +203,7 @@ ORDER BY ge.event_date DESC;
     throw err;
   }
 };
+
 
 // const getHeatMap = async () => {
 //   const sql = `
