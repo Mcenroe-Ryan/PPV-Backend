@@ -57,6 +57,23 @@ router.get("/getSupplierSavings", async (req, res) => {
   }
 });
 
+router.post("/suppliers/by-sku", async (req, res) => {
+  try {
+    const raw = req.body?.skuId ?? req.body?.sku_id;
+    const skuId = Number(raw);
+    if (!Number.isFinite(skuId)) {
+      return res.status(400).json({ error: "skuId is required and must be a number" });
+    }
+    const suppliers = await service.getAllSuppliersData(skuId);
+    return res.json(suppliers);
+  } catch (e) {
+    console.error("suppliers/by-sku error:", e);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
 // router.get("/getLineChart", async (req, res) => {
 //   try {
 //     const data = await service.getLineChart();

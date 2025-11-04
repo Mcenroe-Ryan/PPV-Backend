@@ -13,6 +13,28 @@ const getAllSuppliers = async () => {
   }
 };
 
+const getAllSuppliersData = async (skuId) => {
+  const sql = `
+    SELECT DISTINCT ON (sp.supplier_id)
+           sp.supplier_id,
+           sp.supplier_name,
+           sp.supplier_country
+    FROM public.supplier_plant_mapping AS spm
+    JOIN public.suppliers AS sp
+      ON sp.supplier_id = spm.supplier_id
+    WHERE spm.sku_id = $1
+    ORDER BY sp.supplier_id, spm.mapping_id ASC;
+  `;
+  try {
+    const { rows } = await query(sql, [Number(skuId)]);
+    return rows;
+  } catch (err) {
+    console.error("Database error (getAllSuppliersData):", err);
+    throw err;
+  }
+};
+
+
 const getAllCities = async () => {
   try {
     const result = await query("select * from dim_city where state_id = 1");
@@ -815,4 +837,5 @@ module.exports = {
   getHeatMap,
   getAlerts,
   getGlobalEvents,
+  getAllSuppliersData
 };
