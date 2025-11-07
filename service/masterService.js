@@ -800,6 +800,178 @@ const updateAlertsStrikethroughService = async (id, is_checked) => {
   return result.rows[0];
 };
 
+// const getSAQChartData = async (supplier_id, start_date, end_date) => {
+//   console.log("🔍 [Service] getSAQChartData called with:", { supplier_id, start_date, end_date });
+
+//   // ✅ coded supplier_id to 1
+//   // const fixedSupplierId = 7;
+
+//   const sql = `
+//     SELECT 
+//       pfm.forecast_month AS date_value,
+//       sp.standard_price,
+//       (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
+//       pq.quantity
+//     FROM ppv_forecast_monthly pfm
+//     JOIN standard_prices sp ON (
+//       sp.supplier_id = pfm.supplier_id 
+//       AND sp.plant_id = pfm.plant_id 
+//       AND sp.sku_id = pfm.sku_id
+//       AND sp.effective_date <= pfm.forecast_month
+//     )
+//     JOIN purchase_quantities pq ON (
+//       pq.supplier_id = pfm.supplier_id
+//       AND pq.plant_id = pfm.plant_id
+//       AND pq.sku_id = pfm.sku_id
+//       AND pq.forecast_month = pfm.forecast_month
+//     )
+//     WHERE pfm.supplier_id = $1
+//       AND pfm.forecast_month BETWEEN $2 AND $3
+//     ORDER BY pfm.forecast_month;
+//   `;
+
+//   // console.log("🧾 Executing SQL Query...");
+//   // console.log(sql);
+//   // console.log("🧩 Query Parameters:", [fixedSupplierId, start_date, end_date]);
+
+//   const startTime = Date.now();
+//   try {
+//     const { rows } = await query(sql, [supplier_id, start_date, end_date]);
+//     const duration = Date.now() - startTime;
+//     console.log(`⏱️ Query executed in ${duration}ms. Rows returned: ${rows.length}`);
+
+//     if (rows.length === 0) {
+//       console.warn("⚠️ No records found for the given supplier/date range.");
+//     }
+
+//     return rows;
+//   } catch (error) {
+//     console.error("❌ SQL Query Failed:", error.message);
+//     throw error;
+//   }
+// };
+const getSAQChartData = async (supplier_id, start_date, end_date) => {
+  // Normalize supplier_id:
+  // - use incoming if it's a positive finite number
+  // - if 0, null, undefined, NaN, or <= 0 => default to 7
+  let effectiveSupplierId = Number(supplier_id);
+
+  if (!Number.isFinite(effectiveSupplierId) || effectiveSupplierId <= 0) {
+    effectiveSupplierId = 7;
+  }
+
+  console.log("🔍 [Service] getSAQChartData called with:", {
+    raw_supplier_id: supplier_id,
+    effectiveSupplierId,
+    start_date,
+    end_date,
+  });
+
+  const sql = `
+    SELECT 
+      pfm.forecast_month AS date_value,
+      sp.standard_price,
+      (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
+      pq.quantity
+    FROM ppv_forecast_monthly pfm
+    JOIN standard_prices sp ON (
+      sp.supplier_id = pfm.supplier_id 
+      AND sp.plant_id = pfm.plant_id 
+      AND sp.sku_id = pfm.sku_id
+      AND sp.effective_date <= pfm.forecast_month
+    )
+    JOIN purchase_quantities pq ON (
+      pq.supplier_id = pfm.supplier_id
+      AND pq.plant_id = pfm.plant_id
+      AND pq.sku_id = pfm.sku_id
+      AND pq.forecast_month = pfm.forecast_month
+    )
+    WHERE pfm.supplier_id = $1
+      AND pfm.forecast_month BETWEEN $2 AND $3
+    ORDER BY pfm.forecast_month;
+  `;
+
+  const startTime = Date.now();
+  try {
+    const { rows } = await query(sql, [
+      effectiveSupplierId,
+      start_date,
+      end_date,
+    ]);
+
+    const duration = Date.now() - startTime;
+    console.log(
+      `⏱️ Query executed in ${duration}ms. Rows returned: ${rows.length}`
+    );
+
+    if (rows.length === 0) {
+      console.warn(
+        "⚠️ No records found for the given supplier/date range.",
+        { effectiveSupplierId, start_date, end_date }
+      );
+    }
+
+    return rows;
+  } catch (error) {
+    console.error("❌ SQL Query Failed:", error.message, {
+      effectiveSupplierId,
+      start_date,
+      end_date,
+    });
+    throw error;
+  }
+};
+
+
+const getSAQTableData = async (supplier_id, start_date, end_date) => {
+  const sql = `
+    SELECT 
+      EXTRACT(YEAR FROM pfm.forecast_month) AS year,
+      TO_CHAR(pfm.forecast_month, 'Mon') AS month_label,
+      ROUND(sp.standard_price, 2) AS standard_price,
+      ROUND(sp.standard_price + pfm.ppv_variance_amount, 2) AS actual_price,
+      ROUND(pq.quantity, 0) AS quantity
+    FROM ppv_forecast_monthly pfm
+    JOIN standard_prices sp ON (
+      sp.supplier_id = pfm.supplier_id 
+      AND sp.plant_id = pfm.plant_id 
+      AND sp.sku_id = pfm.sku_id
+      AND sp.effective_date <= pfm.forecast_month
+    )
+    JOIN purchase_quantities pq ON (
+      pq.supplier_id = pfm.supplier_id
+      AND pq.plant_id = pfm.plant_id
+      AND pq.sku_id = pfm.sku_id
+      AND pq.forecast_month = pfm.forecast_month
+    )
+    WHERE pfm.supplier_id = $1
+      AND pfm.forecast_month BETWEEN $2 AND $3
+    ORDER BY pfm.forecast_month;
+  `;
+  const { rows } = await query(sql, [supplier_id, start_date, end_date]);
+  return rows;
+};
+
+const getSAQQuantityData = async (supplier_id, start_date, end_date) => {
+  const sql = `
+    SELECT 
+      pfm.forecast_month AS date_value,
+      pq.quantity
+    FROM ppv_forecast_monthly pfm
+    JOIN purchase_quantities pq ON (
+      pq.supplier_id = pfm.supplier_id
+      AND pq.plant_id = pfm.plant_id
+      AND pq.sku_id = pfm.sku_id
+      AND pq.forecast_month = pfm.forecast_month
+    )
+    WHERE pfm.supplier_id = $1
+      AND pfm.forecast_month BETWEEN $2 AND $3
+    ORDER BY pfm.forecast_month;
+  `;
+  const { rows } = await query(sql, [supplier_id, start_date, end_date]);
+  return rows;
+};
+
 module.exports = {
   // demand_planning code
   getAllCategories,
@@ -837,5 +1009,8 @@ module.exports = {
   getHeatMap,
   getAlerts,
   getGlobalEvents,
-  getAllSuppliersData
+  getAllSuppliersData,
+  getSAQChartData,
+  getSAQTableData,
+  getSAQQuantityData
 };

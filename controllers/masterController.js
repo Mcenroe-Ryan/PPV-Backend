@@ -23,7 +23,10 @@ const {
   getDsModelMetrics,
   getFvaVsStats,
   getAllSuppliers,
-  getAllSupplierLocation
+  getAllSupplierLocation,
+  getSAQChartData,
+  getSAQTableData,
+  getSAQQuantityData,
 } = require("../service/masterService");
 
 const getAllSupplierData = async (req, res) => {
@@ -285,6 +288,54 @@ const updateAlertsStrikethroughController = async (req, res) => {
   }
 };
 
+const getSAQChartDataController = async (req, res) => {
+  try {
+    console.log("📥 [POST] /api/saq/chart called with body:", req.body);
+
+    const { supplier_id, start_date, end_date } = req.body;
+
+    // Input validation
+    if (!supplier_id || !start_date || !end_date) {
+      console.warn("⚠️ Missing required parameters:", { supplier_id, start_date, end_date });
+      return res.status(400).json({
+        error: "Missing required parameters: supplier_id, start_date, end_date",
+      });
+    }
+
+    console.log(`🧠 Fetching SAQ chart data for supplier_id=${supplier_id}, range=${start_date} → ${end_date}`);
+
+    const result = await getSAQChartData(supplier_id, start_date, end_date);
+
+    console.log(`✅ Query success: ${result.length} records fetched.`);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ Error in getSAQChartDataController:", error.message);
+    console.error(error.stack);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const getSAQTableDataController = async (req, res) => {
+  try {
+    const { supplier_id, start_date, end_date } = req.query;
+    const result = await getSAQTableData(supplier_id, start_date, end_date);
+    res.json(result);
+  } catch (err) {
+    console.error("Error in getSAQTableData:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const getSAQQuantityDataController = async (req, res) => {
+  try {
+    const { supplier_id, start_date, end_date } = req.query;
+    const result = await getSAQQuantityData(supplier_id, start_date, end_date);
+    res.json(result);
+  } catch (err) {
+    console.error("Error in getSAQQuantityData:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
 
 module.exports = {
   getAllCountriesData,
@@ -312,5 +363,8 @@ module.exports = {
   getFvaVsStatsData,
 
   getAllSupplierData,
-  getAllSupplierLocationData
+  getAllSupplierLocationData,
+  getSAQChartDataController,
+  getSAQTableDataController,
+  getSAQQuantityDataController
 };

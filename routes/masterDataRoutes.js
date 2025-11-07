@@ -25,7 +25,10 @@ const {
   getFvaVsStatsData,
 
   getAllSupplierData,
-  getAllSupplierLocationData
+  getAllSupplierLocationData,
+  getSAQChartDataController,
+  getSAQTableDataController,
+  getSAQQuantityDataController
 } = require("../controllers/masterController");
 const service = require("../service/masterService");
 
@@ -487,5 +490,34 @@ router.post("/generate/all", async (req, res) => {
     });
   }
 });
+
+router.post("/saq/chart", async (req, res) => {
+  try {
+    console.log("📥 [POST] /api/saq/chart called with body:", req.body);
+
+    const { supplier_id, start_date, end_date } = req.body;
+
+    // 🔸 Validate request body
+    if (!supplier_id || !start_date || !end_date) {
+      console.warn("⚠️ Missing required parameters:", { supplier_id, start_date, end_date });
+      return res.status(400).json({
+        error: "Missing required parameters: supplier_id, start_date, end_date",
+      });
+    }
+
+    console.log(`🧠 Fetching SAQ chart data for supplier_id=${supplier_id}, range=${start_date} → ${end_date}`);
+
+    // 🔸 Call service function
+    const data = await service.getSAQChartData(supplier_id, start_date, end_date);
+
+    console.log(`✅ Query success: ${data.length} records fetched.`);
+    res.status(200).json(data);
+  } catch (err) {
+    console.error("❌ Error in /api/saq/chart:", err.message);
+    res.status(500).json({ error: "Internal server error", details: err.message });
+  }
+});
+router.get("/saq/table", getSAQTableDataController);
+router.get("/saq/quantity", getSAQQuantityDataController);
 
 module.exports = router;
