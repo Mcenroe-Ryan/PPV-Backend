@@ -410,8 +410,6 @@ router.put("/forecast/consensus", async (req, res) => {
 //   }
 // });
 
-
-
 // Generate data for both countries
 // In routes, replace the generate/all route section:
 router.post("/generate/all", async (req, res) => {
@@ -493,31 +491,94 @@ router.post("/generate/all", async (req, res) => {
 
 router.post("/saq/chart", async (req, res) => {
   try {
-    console.log("📥 [POST] /api/saq/chart called with body:", req.body);
-
     const { supplier_id, start_date, end_date } = req.body;
 
-    // 🔸 Validate request body
     if (!supplier_id || !start_date || !end_date) {
-      console.warn("⚠️ Missing required parameters:", { supplier_id, start_date, end_date });
       return res.status(400).json({
         error: "Missing required parameters: supplier_id, start_date, end_date",
       });
     }
 
-    console.log(`🧠 Fetching SAQ chart data for supplier_id=${supplier_id}, range=${start_date} → ${end_date}`);
-
-    // 🔸 Call service function
     const data = await service.getSAQChartData(supplier_id, start_date, end_date);
 
-    console.log(`✅ Query success: ${data.length} records fetched.`);
     res.status(200).json(data);
   } catch (err) {
-    console.error("❌ Error in /api/saq/chart:", err.message);
     res.status(500).json({ error: "Internal server error", details: err.message });
   }
 });
+
 router.get("/saq/table", getSAQTableDataController);
 router.get("/saq/quantity", getSAQQuantityDataController);
+
+// Scorecards list
+router.get("/scorecards", async (req, res, next) => {
+  try {
+    const { scoreCategory, supplierId } = req.query;
+    const data = await service.getSupplierScorecards(
+      scoreCategory || null,
+      supplierId ? Number(supplierId) : null
+    );
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Factors by scorecard
+router.get("/scorecards/:scorecardId/factors", async (req, res, next) => {
+  try {
+    const data = await service.getScorecardFactorsById(Number(req.params.scorecardId));
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Supplier metric trends
+router.get(
+  "/suppliers/:supplierId/market-metric-trends",
+  async (req, res, next) => {
+    try {
+      const { metricName } = req.query;
+      const data = await service.getMarketMetricTrendsBySupplier(
+        Number(req.params.supplierId),
+        metricName || null
+      );
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Configs
+router.get("/scoring-configs/active", async (req, res, next) => {
+  try {
+    const data = await service.getActiveScoringConfigurations();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bottom trends
+router.get("/market-trends/bottom", async (req, res, next) => {
+  try {
+    const data = await service.getBottomMarketTrends();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Scoring models dropdown
+router.get("/score-categories", async (req, res, next) => {
+  try {
+    const data = await service.getScoreCategories();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = router;

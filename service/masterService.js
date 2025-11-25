@@ -131,46 +131,7 @@ const getLineChart = async ({ startDate, endDate }) => {
     throw err;
   }
 };
-// const getLineChart = async ({ startDate, endDate, skuId, skuIds }) => {
-//   // fallback window if dates not provided
-//   const start = startDate || "2023-10-01";
-//   const end   = endDate   || "2025-09-01";
 
-//   const params = [start, end];
-//   const where = [
-//     `pfm.forecast_month >= $1`,
-//     `pfm.forecast_month <= $2`,
-//   ];
-
-//   // Optional SKU filters
-//   // Accept either a single skuId or an array skuIds
-//   if (Array.isArray(skuIds) && skuIds.length > 0) {
-//     params.push(skuIds.map(Number)); // ensure ints
-//     where.push(`pfm.sku_id = ANY($${params.length}::int[])`);
-//   } else if (skuId != null) {
-//     params.push(Number(skuId));
-//     where.push(`pfm.sku_id = $${params.length}::int`);
-//   }
-
-//   const sql = `
-//     SELECT
-//       s.supplier_name,
-//       pfm.forecast_month,
-//       pfm.ppv_variance_percentage
-//     FROM ppv_forecast_monthly pfm
-//     JOIN suppliers s ON pfm.supplier_id = s.supplier_id
-//     WHERE ${where.join(" AND ")}
-//     ORDER BY s.supplier_name, pfm.forecast_month;
-//   `;
-
-//   try {
-//     const { rows } = await query(sql, params);
-//     return rows;
-//   } catch (err) {
-//     console.error("Database error (getLineChart):", err);
-//     throw err;
-//   }
-// };
 const getAlerts = async () => {
   const sql = `
 SELECT 
@@ -226,49 +187,6 @@ ORDER BY ge.event_date DESC;
   }
 };
 
-
-// const getHeatMap = async () => {
-//   const sql = `
-// SELECT
-//     s.supplier_name,
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 10 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2023 THEN pfm.ppv_variance_percentage END) AS "Oct 2023",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 11 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2023 THEN pfm.ppv_variance_percentage END) AS "Nov 2023",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 12 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2023 THEN pfm.ppv_variance_percentage END) AS "Dec 2023",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 1 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Jan 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 2 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Feb 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 3 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Mar 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 4 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Apr 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 5 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "May 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 6 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Jun 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 7 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Jul 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 8 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Aug 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 9 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Sep 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 10 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Oct 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 11 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Nov 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 12 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2024 THEN pfm.ppv_variance_percentage END) AS "Dec 2024",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 1 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Jan 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 2 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Feb 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 3 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Mar 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 4 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Apr 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 5 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "May 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 6 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Jun 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 7 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Jul 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 8 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Aug 2025",
-//     MAX(CASE WHEN EXTRACT(MONTH FROM pfm.forecast_month) = 9 AND EXTRACT(YEAR FROM pfm.forecast_month) = 2025 THEN pfm.ppv_variance_percentage END) AS "Sep 2025"
-// FROM ppv_forecast_monthly pfm
-// JOIN suppliers s ON pfm.supplier_id = s.supplier_id
-// WHERE pfm.forecast_month BETWEEN '2023-10-01' AND '2025-09-01'
-// GROUP BY s.supplier_name
-// ORDER BY s.supplier_name;
-//   `;
-//   try {
-//     const { rows } = await query(sql);
-//     return rows;
-//   } catch (err) {
-//     console.error("Database error (getLineChart):", err);
-//     throw err;
-//   }
-// };
 
 // Accepts: { startDate, endDate, countryIds, stateIds, plantIds, skuIds, supplierIds, supplierLocations }
 const getHeatMap = async (payload = {}) => {
@@ -801,10 +719,11 @@ const updateAlertsStrikethroughService = async (id, is_checked) => {
 };
 
 // const getSAQChartData = async (supplier_id, start_date, end_date) => {
-//   console.log("🔍 [Service] getSAQChartData called with:", { supplier_id, start_date, end_date });
+//   let effectiveSupplierId = Number(supplier_id);
 
-//   // ✅ coded supplier_id to 1
-//   // const fixedSupplierId = 7;
+//   if (!Number.isFinite(effectiveSupplierId) || effectiveSupplierId <= 0) {
+//     effectiveSupplierId = 7;
+//   }
 
 //   const sql = `
 //     SELECT 
@@ -830,42 +749,29 @@ const updateAlertsStrikethroughService = async (id, is_checked) => {
 //     ORDER BY pfm.forecast_month;
 //   `;
 
-//   // console.log("🧾 Executing SQL Query...");
-//   // console.log(sql);
-//   // console.log("🧩 Query Parameters:", [fixedSupplierId, start_date, end_date]);
-
-//   const startTime = Date.now();
 //   try {
-//     const { rows } = await query(sql, [supplier_id, start_date, end_date]);
-//     const duration = Date.now() - startTime;
-//     console.log(`⏱️ Query executed in ${duration}ms. Rows returned: ${rows.length}`);
-
-//     if (rows.length === 0) {
-//       console.warn("⚠️ No records found for the given supplier/date range.");
-//     }
+//     const { rows } = await query(sql, [
+//       effectiveSupplierId,
+//       start_date,
+//       end_date,
+//     ]);
 
 //     return rows;
 //   } catch (error) {
-//     console.error("❌ SQL Query Failed:", error.message);
 //     throw error;
 //   }
 // };
-const getSAQChartData = async (supplier_id, start_date, end_date) => {
-  // Normalize supplier_id:
-  // - use incoming if it's a positive finite number
-  // - if 0, null, undefined, NaN, or <= 0 => default to 7
-  let effectiveSupplierId = Number(supplier_id);
 
+const getSAQChartData = async (supplier_id, start_date, end_date) => {
+  let effectiveSupplierId = Number(
+    supplier_id ?? DEFAULT_SAQ_FILTERS.supplier_id
+  );
   if (!Number.isFinite(effectiveSupplierId) || effectiveSupplierId <= 0) {
-    effectiveSupplierId = 7;
+    effectiveSupplierId = DEFAULT_SAQ_FILTERS.supplier_id;
   }
 
-  console.log("🔍 [Service] getSAQChartData called with:", {
-    raw_supplier_id: supplier_id,
-    effectiveSupplierId,
-    start_date,
-    end_date,
-  });
+  const effectiveStartDate = start_date || DEFAULT_SAQ_FILTERS.start_date;
+  const effectiveEndDate = end_date || DEFAULT_SAQ_FILTERS.end_date;
 
   const sql = `
     SELECT 
@@ -891,33 +797,14 @@ const getSAQChartData = async (supplier_id, start_date, end_date) => {
     ORDER BY pfm.forecast_month;
   `;
 
-  const startTime = Date.now();
   try {
     const { rows } = await query(sql, [
       effectiveSupplierId,
-      start_date,
-      end_date,
+      effectiveStartDate,
+      effectiveEndDate,
     ]);
-
-    const duration = Date.now() - startTime;
-    console.log(
-      `⏱️ Query executed in ${duration}ms. Rows returned: ${rows.length}`
-    );
-
-    if (rows.length === 0) {
-      console.warn(
-        "⚠️ No records found for the given supplier/date range.",
-        { effectiveSupplierId, start_date, end_date }
-      );
-    }
-
     return rows;
   } catch (error) {
-    console.error("❌ SQL Query Failed:", error.message, {
-      effectiveSupplierId,
-      start_date,
-      end_date,
-    });
     throw error;
   }
 };
@@ -972,6 +859,174 @@ const getSAQQuantityData = async (supplier_id, start_date, end_date) => {
   return rows;
 };
 
+// Get supplier scorecards (filter by scoreCategory + optional supplierId)
+const getSupplierScorecards = async (scoreCategory, supplierId) => {
+  const params = [];
+  let sql = `
+    SELECT 
+      s.supplier_name,
+      sc.pricing_score,
+      sc.order_accuracy_score,
+      sc.on_time_delivery_score,
+      sc.good_service_quality_score,
+      sc.risk_compliance_score,
+      sc.overall_rc_score,
+      sc.score_category,
+      sc.scorecard_id
+    FROM supplier_scorecards sc
+    JOIN suppliers s ON sc.supplier_id = s.supplier_id
+    WHERE sc.is_active = TRUE
+  `;
+
+  if (scoreCategory) {
+    params.push(scoreCategory);
+    sql += ` AND sc.score_category = $${params.length}`;
+  }
+
+  if (supplierId) {
+    params.push(supplierId);
+    sql += ` AND sc.supplier_id = $${params.length}`;
+  }
+
+  sql += ` ORDER BY sc.overall_rc_score DESC`;
+
+  const result = await query(sql, params);
+  return result.rows;
+};
+
+// Get factor contributions for a given scorecard_id
+const getScorecardFactorsById = async (scorecardId) => {
+  if (!scorecardId) return [];
+
+  const result = await query(
+    `
+    SELECT
+      factor_category,
+      factor_name,
+      factor_value
+    FROM scorecard_factors
+    WHERE scorecard_id = $1
+    ORDER BY factor_category, factor_name
+    `,
+    [scorecardId]
+  );
+
+  return result.rows;
+};
+
+
+// Get market metric trends for a supplier
+// If metricName is passed -> filter; else return all metrics for that supplier
+const getMarketMetricTrendsBySupplier = async (supplierId, metricName) => {
+  if (!supplierId) return [];
+
+  const params = [supplierId];
+  let sql = `
+    SELECT 
+      trend_date AS date_value,
+      value AS y_value,
+      is_forecast,
+      metric_name
+    FROM market_metric_trends
+    WHERE supplier_id = $1
+  `;
+
+  if (metricName) {
+    params.push(metricName);
+    sql += ` AND metric_name = $${params.length}`;
+  }
+
+  sql += ` ORDER BY metric_name, trend_date`;
+
+  const result = await query(sql, params);
+  return result.rows;
+};
+
+
+// Get Quantity trend for a specific supplier
+const getQuantityTrendBySupplier = async (supplierId) => {
+  if (!supplierId) return [];
+
+  const result = await query(
+    `
+    SELECT 
+      trend_date AS date_value,
+      value AS y_value,
+      is_forecast
+    FROM market_metric_trends
+    WHERE supplier_id = $1
+      AND metric_name = 'Quantity'
+    ORDER BY trend_date
+    `,
+    [supplierId]
+  );
+
+  return result.rows;
+};
+
+
+// Get active scoring configurations
+const getActiveScoringConfigurations = async () => {
+  const result = await query(
+    `
+    SELECT 
+      config_id,
+      config_name,
+      financial_weight,
+      environmental_social_weight,
+      regulatory_legal_weight,
+      operational_weight,
+      total_weight
+    FROM scoring_configurations
+    WHERE is_active = TRUE
+    ORDER BY config_name
+    `
+  );
+
+  return result.rows;
+};
+
+
+// Get bottom-row market trends for fixed metrics
+const getBottomMarketTrends = async () => {
+  const result = await query(
+    `
+    SELECT 
+      metric_name,
+      trend_date AS date_value,
+      value AS y_value
+    FROM market_trends
+    WHERE metric_name IN (
+      'Quantity',
+      'Raw Material - Rubber / Polymer Cost in ($)',
+      'Fuel Cost (WTI) in $',
+      'Fuel Cost (Brent) in $',
+      'Exchange Rate Dollar/Euro'
+    )
+    ORDER BY metric_name, trend_date
+    `
+  );
+
+  return result.rows;
+};
+
+// Get distinct scoring categories for dropdown
+const getScoreCategories = async () => {
+  const result = await query(
+    `
+    SELECT DISTINCT 
+      score_category AS value,
+      score_category AS label
+    FROM supplier_scorecards
+    WHERE is_active = TRUE
+    ORDER BY score_category
+    `
+  );
+
+  return result.rows;
+};
+
+
 module.exports = {
   // demand_planning code
   getAllCategories,
@@ -1012,5 +1067,13 @@ module.exports = {
   getAllSuppliersData,
   getSAQChartData,
   getSAQTableData,
-  getSAQQuantityData
+  getSAQQuantityData,
+
+  getSupplierScorecards,
+  getScorecardFactorsById,
+  getMarketMetricTrendsBySupplier,
+  getActiveScoringConfigurations,
+  getBottomMarketTrends,
+  getScoreCategories,
+  getQuantityTrendBySupplier
 };
