@@ -12,8 +12,8 @@ const mainRoutes = require("./routes/masterDataRoutes");
 // CORS setup – allows local dev and production frontend
 const allowedOrigins = [
   "http://localhost:5173",
-  process.env.FRONTEND_URL // Optional: set this in .env for production
-];
+   process.env.FRONTEND_URL || "http://13.53.61.186:5002"
+  ];
 
 app.use(cors({
   origin: function (origin, callback) {
