@@ -1,4 +1,4 @@
-const { query } = require("../config/db"); // Adjust path if needed
+const { query } = require("../config/db"); 
 
 const {
   getAllCategories,
@@ -27,6 +27,7 @@ const {
   getSAQChartData,
   getSAQTableData,
   getSAQQuantityData,
+  getForecastExplainability,
 } = require("../service/masterService");
 
 const getAllSupplierData = async (req, res) => {
@@ -329,6 +330,26 @@ const getSAQQuantityDataController = async (req, res) => {
   }
 };
 
+const getForecastExplainabilityController = async (req, res) => {
+  try {
+    const supplierIdParam =
+      req.params?.supplierId ?? req.query?.supplier_id ?? req.body?.supplier_id;
+    const supplierId = Number(supplierIdParam);
+
+    if (!Number.isFinite(supplierId) || supplierId <= 0) {
+      return res
+        .status(400)
+        .json({ error: "supplierId is required and must be a number" });
+    }
+
+    const result = await getForecastExplainability(supplierId);
+    res.json(result);
+  } catch (err) {
+    console.error("Error in getForecastExplainability:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   getAllCountriesData,
   getAllCitiesData,
@@ -358,5 +379,6 @@ module.exports = {
   getAllSupplierLocationData,
   getSAQChartDataController,
   getSAQTableDataController,
-  getSAQQuantityDataController
+  getSAQQuantityDataController,
+  getForecastExplainabilityController
 };

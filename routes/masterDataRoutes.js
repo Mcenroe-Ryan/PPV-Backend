@@ -28,7 +28,8 @@ const {
   getAllSupplierLocationData,
   getSAQChartDataController,
   getSAQTableDataController,
-  getSAQQuantityDataController
+  getSAQQuantityDataController,
+  getForecastExplainabilityController
 } = require("../controllers/masterController");
 const service = require("../service/masterService");
 
@@ -81,18 +82,47 @@ function isISODate(s) {
 
 router.post('/getLineChart', async (req, res) => {
   try {
-    const { startDate, endDate, supplierIds } = req.body || {};
+    const { startDate, endDate } = req.body || {};
 
+    // Optional validation – if provided, they must be ISO dates
     const payload = {};
-
-    // ---- date validation ----
     if (startDate) {
       if (!isISODate(startDate)) {
         return res.status(400).json({ error: 'Invalid startDate. Use YYYY-MM-DD.' });
       }
       payload.startDate = startDate;
     }
+    if (endDate) {
+      if (!isISODate(endDate)) {
+        return res.status(400).json({ error: 'Invalid endDate. Use YYYY-MM-DD.' });
+      }
+      payload.endDate = endDate;
+    }
 
+    // Optional ordering check if both present
+    if (payload.startDate && payload.endDate && payload.startDate > payload.endDate) {
+      return res.status(400).json({ error: 'startDate must be <= endDate.' });
+    }
+
+    const data = await service.getLineChart(payload); // service applies defaults if missing
+    res.json(data);
+  } catch (err) {
+    console.error('[POST] /getLineChart failed:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/getWeeklyLineChart', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body || {};
+
+    const payload = {};
+    if (startDate) {
+      if (!isISODate(startDate)) {
+        return res.status(400).json({ error: 'Invalid startDate. Use YYYY-MM-DD.' });
+      }
+      payload.startDate = startDate;
+    }
     if (endDate) {
       if (!isISODate(endDate)) {
         return res.status(400).json({ error: 'Invalid endDate. Use YYYY-MM-DD.' });
@@ -104,41 +134,14 @@ router.post('/getLineChart', async (req, res) => {
       return res.status(400).json({ error: 'startDate must be <= endDate.' });
     }
 
-    // ---- supplierIds (number | array | undefined) ----
-    if (supplierIds !== undefined && supplierIds !== null) {
-      let normalizedSupplierIds = [];
-
-      if (Array.isArray(supplierIds)) {
-        // validate all items are numeric
-        const invalid = supplierIds.some(
-          (id) => id === null || id === '' || Number.isNaN(Number(id))
-        );
-        if (invalid) {
-          return res
-            .status(400)
-            .json({ error: 'Invalid supplierIds. Must all be numbers.' });
-        }
-        normalizedSupplierIds = supplierIds.map((id) => Number(id));
-      } else {
-        // single value
-        if (Number.isNaN(Number(supplierIds))) {
-          return res
-            .status(400)
-            .json({ error: 'Invalid supplierIds. Must be a number.' });
-        }
-        normalizedSupplierIds = [Number(supplierIds)];
-      }
-
-      payload.supplierIds = normalizedSupplierIds;
-    }
-
-    const data = await service.getLineChart(payload); 
+    const data = await service.getWeeklyLineChart(payload);
     res.json(data);
   } catch (err) {
-    console.error('[POST] /getLineChart failed:', err);
+    console.error('[POST] /getWeeklyLineChart failed:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 router.post("/getHeatMap", async (req, res) => {
   try {
@@ -146,6 +149,16 @@ router.post("/getHeatMap", async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("GET HEATMAP failed:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/getWeeklyHeatMap", async (req, res) => {
+  try {
+    const data = await service.getWeeklyHeatMap(req.body || {});
+    res.json(data);
+  } catch (err) {
+    console.error("GET WEEKLY HEATMAP failed:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -295,6 +308,84 @@ router.put("/forecast/consensus", async (req, res) => {
   }
 });
 
+// Generate data for both countries
+// In routes, replace the generate/all route section:
+// router.post("/generate/all", async (req, res) => {
+//   try {
+//     console.log("Starting data generation for both countries...");
+
+//     const DataGenerationService = require("../service/dataGenerationService");
+//     const dataServiceInstance = new DataGenerationService();
+
+//     console.log("Clearing all existing data...");
+//     const totalCleared = await dataServiceInstance.clearTableData();
+//     console.log(`Cleared ${totalCleared} existing records`);
+
+//     const results = [];
+
+//     // Generate India data
+//     try {
+//       const indiaResult = await dataServiceInstance.generateData("India");
+//       results.push({
+//         country: "India",
+//         success: true,
+//         recordsGenerated: indiaResult.recordsCount,
+//         productsProcessed: indiaResult.productsCount,
+//         message: indiaResult.message,
+//       });
+//     } catch (error) {
+//       results.push({
+//         country: "India",
+//         success: false,
+//         error: error.message,
+//       });
+//     }
+
+//     // Generate USA data
+//     try {
+//       const usaResult = await dataServiceInstance.generateData("USA");
+//       results.push({
+//         country: "USA",
+//         success: true,
+//         recordsGenerated: usaResult.recordsCount,
+//         productsProcessed: usaResult.productsCount,
+//         message: usaResult.message,
+//       });
+//     } catch (error) {
+//       results.push({
+//         country: "USA",
+//         success: false,
+//         error: error.message,
+//       });
+//     }
+
+//     const allSuccessful = results.every((r) => r.success);
+//     const totalRecords = results.reduce(
+//       (sum, r) => sum + (r.recordsGenerated || 0),
+//       0
+//     );
+
+//     res.status(allSuccessful ? 200 : 207).json({
+//       success: allSuccessful,
+//       message: allSuccessful
+//         ? "Successfully cleared existing data and generated fresh data for both countries"
+//         : "Data generation completed with some errors",
+//       data: {
+//         totalRecords,
+//         clearedRecords: totalCleared,
+//         results,
+//         timestamp: new Date().toISOString(),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Error in bulk data generation:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to generate data",
+//       error: error.message,
+//     });
+//   }
+// });
 
 // Generate data for both countries
 // In routes, replace the generate/all route section:
@@ -395,6 +486,10 @@ router.post("/saq/chart", async (req, res) => {
 
 router.get("/saq/table", getSAQTableDataController);
 router.get("/saq/quantity", getSAQQuantityDataController);
+router.get(
+  "/forecast-explainability/:supplierId",
+  getForecastExplainabilityController
+);
 
 // Scorecards list
 router.get("/scorecards", async (req, res, next) => {
@@ -466,37 +561,5 @@ router.get("/score-categories", async (req, res, next) => {
     next(err);
   }
 });
-
-router.post("/getQuantityTrendBySupplier", async (req, res) => {
-  try {
-    const { supplier_id } = req.body;
-
-    if (!supplier_id) {
-      return res.status(400).json({
-        error: "Missing required parameters: supplier_id",
-      });
-    }
-
-    // ensure numeric supplier id if your DB column is integer
-    const supplierIdNum = Number(supplier_id);
-    if (!Number.isFinite(supplierIdNum)) {
-      return res.status(400).json({
-        error: "supplier_id must be a valid number",
-      });
-    }
-
-    const data = await service.getQuantityTrendBySupplier(
-      supplierIdNum,
-    );
-
-    res.status(200).json(data);
-  } catch (err) {
-    console.error("[POST] /getQuantityTrendBySupplier", err);
-    res
-      .status(500)
-      .json({ error: "Internal server error", details: err.message });
-  }
-});
-
 
 module.exports = router;

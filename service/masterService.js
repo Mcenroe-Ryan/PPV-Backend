@@ -105,13 +105,13 @@ const getSupplierSavingsLast6Months = async () => {
   }
 };
 
-const getLineChart = async ({ startDate, endDate, supplierIds }) => {
+
+const getLineChart = async ({ startDate, endDate }) => {
   // fallback window if dates not provided
   const start = startDate || "2023-10-01";
   const end = endDate || "2025-09-01";
 
-  // Base SQL
-  let sql = `
+  const sql = `
     SELECT
       s.supplier_name,
       pfm.forecast_month,
@@ -120,35 +120,39 @@ const getLineChart = async ({ startDate, endDate, supplierIds }) => {
     JOIN suppliers s ON pfm.supplier_id = s.supplier_id
     WHERE pfm.forecast_month >= $1
       AND pfm.forecast_month <= $2
-  `;
-
-  const params = [start, end];
-
-  // Normalize supplierIds: allow array OR single value OR null
-  const normalizedSupplierIds =
-    supplierIds == null
-      ? []
-      : Array.isArray(supplierIds)
-      ? supplierIds
-      : [supplierIds];
-
-  if (normalizedSupplierIds.length > 0) {
-    // 👉 filter for ANY of the supplier IDs
-    sql += `
-      AND pfm.supplier_id = ANY($3::int[])
-    `;
-    params.push(normalizedSupplierIds.map((id) => Number(id)));
-  }
-
-  sql += `
     ORDER BY s.supplier_name, pfm.forecast_month;
   `;
 
   try {
-    const { rows } = await query(sql, params);
+    const { rows } = await query(sql, [start, end]);
     return rows;
   } catch (err) {
     console.error("Database error (getLineChart):", err);
+    throw err;
+  }
+};
+
+const getWeeklyLineChart = async ({ startDate, endDate }) => {
+  const start = startDate || "2023-10-01";
+  const end = endDate || "2025-09-01";
+
+  const sql = `
+    SELECT
+      s.supplier_name,
+      pfw.forecast_week,
+      pfw.ppv_variance_percentage
+    FROM ppv_forecast_weekly pfw
+    JOIN suppliers s ON pfw.supplier_id = s.supplier_id
+    WHERE pfw.forecast_week >= $1
+      AND pfw.forecast_week <= $2
+    ORDER BY s.supplier_name, pfw.forecast_week;
+  `;
+
+  try {
+    const { rows } = await query(sql, [start, end]);
+    return rows;
+  } catch (err) {
+    console.error("Database error (getWeeklyLineChart):", err);
     throw err;
   }
 };
@@ -208,6 +212,8 @@ ORDER BY ge.event_date DESC;
   }
 };
 
+
+// Accepts: { startDate, endDate, countryIds, stateIds, plantIds, skuIds, supplierIds, supplierLocations }
 const getHeatMap = async (payload = {}) => {
   const {
     startDate,
@@ -217,12 +223,15 @@ const getHeatMap = async (payload = {}) => {
     plantIds = [],
     skuIds = [],
     supplierIds = [],
-    supplierLocations = [], 
+    supplierLocations = [], // array of country names (strings)
   } = payload;
 
+  // sensible fallbacks if FE didn't send dates
   const start = startDate || "2023-10-01";
   const end = endDate || "2026-12-01";
 
+  // NOTE: adapt joins to your schema if country/state live elsewhere.
+  // The idea is to keep every filter optional.
   const sql = `
     SELECT
       s.supplier_name,
@@ -258,20 +267,90 @@ const getHeatMap = async (payload = {}) => {
   try {
     const { rows } = await query(sql, params);
 
+    // Pivot in Node: one object per supplier with dynamic "Mon YYYY" keys
     const bySupplier = new Map();
     for (const r of rows) {
       if (!bySupplier.has(r.supplier_name)) {
         bySupplier.set(r.supplier_name, { supplier_name: r.supplier_name });
       }
       const obj = bySupplier.get(r.supplier_name);
-      obj[r.month_label] = r.pct; 
+      obj[r.month_label] = r.pct; // e.g., "Apr 2026": 6.5
+    }
+
+    // Return array of pivoted rows, sorted by supplier
+    return Array.from(bySupplier.values()).sort((a, b) =>
+      a.supplier_name.localeCompare(b.supplier_name)
+    );
+  } catch (err) {
+    console.error("Database error (getHeatMap):", err);
+    throw err;
+  }
+};
+
+const getWeeklyHeatMap = async (payload = {}) => {
+  const {
+    startDate,
+    endDate,
+    countryIds = [],
+    stateIds = [],
+    plantIds = [],
+    skuIds = [],
+    supplierIds = [],
+    supplierLocations = [],
+  } = payload;
+
+  const start = startDate || "2023-10-01";
+  const end = endDate || "2026-12-31";
+
+  const sql = `
+    SELECT
+      s.supplier_name,
+      pfw.forecast_week::date                      AS week_date,
+      TO_CHAR(pfw.forecast_week, 'Mon DD, YYYY')   AS week_label,
+      pfw.ppv_variance_percentage::numeric         AS pct
+    FROM ppv_forecast_weekly pfw
+    JOIN suppliers s       ON s.supplier_id = pfw.supplier_id
+    LEFT JOIN plants   p   ON p.plant_id     = pfw.plant_id
+    LEFT JOIN states   st  ON st.state_id    = p.state_id
+    LEFT JOIN countries c  ON c.country_id   = st.country_id
+    WHERE pfw.forecast_week BETWEEN $1::date AND $2::date
+      AND (CARDINALITY($3::int[]) = 0 OR c.country_id = ANY($3::int[]))
+      AND (CARDINALITY($4::int[]) = 0 OR st.state_id = ANY($4::int[]))
+      AND (CARDINALITY($5::int[]) = 0 OR pfw.plant_id = ANY($5::int[]))
+      AND (CARDINALITY($6::int[]) = 0 OR pfw.sku_id = ANY($6::int[]))
+      AND (CARDINALITY($7::int[]) = 0 OR pfw.supplier_id = ANY($7::int[]))
+      AND (CARDINALITY($8::text[]) = 0 OR s.supplier_country = ANY($8::text[]))
+    ORDER BY s.supplier_name, pfw.forecast_week
+  `;
+
+  const params = [
+    start,
+    end,
+    countryIds,
+    stateIds,
+    plantIds,
+    skuIds,
+    supplierIds,
+    supplierLocations,
+  ];
+
+  try {
+    const { rows } = await query(sql, params);
+
+    const bySupplier = new Map();
+    for (const r of rows) {
+      if (!bySupplier.has(r.supplier_name)) {
+        bySupplier.set(r.supplier_name, { supplier_name: r.supplier_name });
+      }
+      const obj = bySupplier.get(r.supplier_name);
+      obj[r.week_label] = r.pct;
     }
 
     return Array.from(bySupplier.values()).sort((a, b) =>
       a.supplier_name.localeCompare(b.supplier_name)
     );
   } catch (err) {
-    console.error("Database error (getHeatMap):", err);
+    console.error("Database error (getWeeklyHeatMap):", err);
     throw err;
   }
 };
@@ -550,7 +629,7 @@ const updateConsensusForecast = async (payload) => {
     throw new Error("consensus_forecast must be a valid number");
   }
 
-  const model_name = payload.model_name || "XGBoost"; 
+  const model_name = payload.model_name || "XGBoost"; // Default fallback
   const arr = (v) => (Array.isArray(v) ? v : [v]);
 
   const params = [
@@ -582,7 +661,7 @@ const updateConsensusForecast = async (payload) => {
   `;
   try {
     const result = await query(sql, params);
-    console.table(result.rows); 
+    console.table(result.rows); // see exactly which rows changed and how
 
     return {
       success: true,
@@ -711,6 +790,7 @@ const alertCountService = async () => {
     const result = await query(
       "SELECT COUNT(*) AS error_count FROM forecast_error WHERE error_type = 'error'"
     );
+    // result.rows[0].error_count will be the count as a string, so convert to number if needed
     return Number(result.rows[0].error_count);
   } catch (err) {
     console.error("Database error:", err);
@@ -731,6 +811,50 @@ const updateAlertsStrikethroughService = async (id, is_checked) => {
   return result.rows[0];
 };
 
+// const getSAQChartData = async (supplier_id, start_date, end_date) => {
+//   let effectiveSupplierId = Number(supplier_id);
+
+//   if (!Number.isFinite(effectiveSupplierId) || effectiveSupplierId <= 0) {
+//     effectiveSupplierId = 7;
+//   }
+
+//   const sql = `
+//     SELECT 
+//       pfm.forecast_month AS date_value,
+//       sp.standard_price,
+//       (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
+//       pq.quantity
+//     FROM ppv_forecast_monthly pfm
+//     JOIN standard_prices sp ON (
+//       sp.supplier_id = pfm.supplier_id 
+//       AND sp.plant_id = pfm.plant_id 
+//       AND sp.sku_id = pfm.sku_id
+//       AND sp.effective_date <= pfm.forecast_month
+//     )
+//     JOIN purchase_quantities pq ON (
+//       pq.supplier_id = pfm.supplier_id
+//       AND pq.plant_id = pfm.plant_id
+//       AND pq.sku_id = pfm.sku_id
+//       AND pq.forecast_month = pfm.forecast_month
+//     )
+//     WHERE pfm.supplier_id = $1
+//       AND pfm.forecast_month BETWEEN $2 AND $3
+//     ORDER BY pfm.forecast_month;
+//   `;
+
+//   try {
+//     const { rows } = await query(sql, [
+//       effectiveSupplierId,
+//       start_date,
+//       end_date,
+//     ]);
+
+//     return rows;
+//   } catch (error) {
+//     throw error;
+//   }
+// };
+
 const getSAQChartData = async (supplier_id, start_date, end_date) => {
   let effectiveSupplierId = Number(
     supplier_id ?? DEFAULT_SAQ_FILTERS.supplier_id
@@ -743,27 +867,40 @@ const getSAQChartData = async (supplier_id, start_date, end_date) => {
   const effectiveEndDate = end_date || DEFAULT_SAQ_FILTERS.end_date;
 
   const sql = `
+    WITH base AS (
+      SELECT 
+        pfm.forecast_month::date AS date_value,
+        sp.standard_price,
+        (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
+        pq.quantity
+      FROM ppv_forecast_monthly pfm
+      JOIN LATERAL (
+        SELECT standard_price
+        FROM standard_prices
+        WHERE supplier_id = pfm.supplier_id 
+          AND plant_id = pfm.plant_id 
+          AND sku_id = pfm.sku_id
+          AND effective_date <= pfm.forecast_month
+        ORDER BY effective_date DESC
+        LIMIT 1
+      ) sp ON true
+      JOIN purchase_quantities pq ON (
+        pq.supplier_id = pfm.supplier_id
+        AND pq.plant_id = pfm.plant_id
+        AND pq.sku_id = pfm.sku_id
+        AND pq.forecast_month = pfm.forecast_month
+      )
+      WHERE pfm.supplier_id = $1
+        AND pfm.forecast_month BETWEEN $2 AND $3
+    )
     SELECT 
-      pfm.forecast_month AS date_value,
-      sp.standard_price,
-      (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
-      pq.quantity
-    FROM ppv_forecast_monthly pfm
-    JOIN standard_prices sp ON (
-      sp.supplier_id = pfm.supplier_id 
-      AND sp.plant_id = pfm.plant_id 
-      AND sp.sku_id = pfm.sku_id
-      AND sp.effective_date <= pfm.forecast_month
-    )
-    JOIN purchase_quantities pq ON (
-      pq.supplier_id = pfm.supplier_id
-      AND pq.plant_id = pfm.plant_id
-      AND pq.sku_id = pfm.sku_id
-      AND pq.forecast_month = pfm.forecast_month
-    )
-    WHERE pfm.supplier_id = $1
-      AND pfm.forecast_month BETWEEN $2 AND $3
-    ORDER BY pfm.forecast_month;
+      date_value,
+      ROUND(AVG(standard_price)::numeric, 4) AS standard_price,
+      ROUND(AVG(actual_price)::numeric, 4) AS actual_price,
+      ROUND(SUM(quantity)::numeric, 2) AS quantity
+    FROM base
+    GROUP BY date_value
+    ORDER BY date_value;
   `;
 
   try {
@@ -781,28 +918,41 @@ const getSAQChartData = async (supplier_id, start_date, end_date) => {
 
 const getSAQTableData = async (supplier_id, start_date, end_date) => {
   const sql = `
+    WITH base AS (
+      SELECT 
+        pfm.forecast_month::date AS date_value,
+        sp.standard_price,
+        (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
+        pq.quantity
+      FROM ppv_forecast_monthly pfm
+      JOIN LATERAL (
+        SELECT standard_price
+        FROM standard_prices
+        WHERE supplier_id = pfm.supplier_id 
+          AND plant_id = pfm.plant_id 
+          AND sku_id = pfm.sku_id
+          AND effective_date <= pfm.forecast_month
+        ORDER BY effective_date DESC
+        LIMIT 1
+      ) sp ON true
+      JOIN purchase_quantities pq ON (
+        pq.supplier_id = pfm.supplier_id
+        AND pq.plant_id = pfm.plant_id
+        AND pq.sku_id = pfm.sku_id
+        AND pq.forecast_month = pfm.forecast_month
+      )
+      WHERE pfm.supplier_id = $1
+        AND pfm.forecast_month BETWEEN $2 AND $3
+    )
     SELECT 
-      EXTRACT(YEAR FROM pfm.forecast_month) AS year,
-      TO_CHAR(pfm.forecast_month, 'Mon') AS month_label,
-      ROUND(sp.standard_price, 2) AS standard_price,
-      ROUND(sp.standard_price + pfm.ppv_variance_amount, 2) AS actual_price,
-      ROUND(pq.quantity, 0) AS quantity
-    FROM ppv_forecast_monthly pfm
-    JOIN standard_prices sp ON (
-      sp.supplier_id = pfm.supplier_id 
-      AND sp.plant_id = pfm.plant_id 
-      AND sp.sku_id = pfm.sku_id
-      AND sp.effective_date <= pfm.forecast_month
-    )
-    JOIN purchase_quantities pq ON (
-      pq.supplier_id = pfm.supplier_id
-      AND pq.plant_id = pfm.plant_id
-      AND pq.sku_id = pfm.sku_id
-      AND pq.forecast_month = pfm.forecast_month
-    )
-    WHERE pfm.supplier_id = $1
-      AND pfm.forecast_month BETWEEN $2 AND $3
-    ORDER BY pfm.forecast_month;
+      EXTRACT(YEAR FROM date_value) AS year,
+      TO_CHAR(date_value, 'Mon') AS month_label,
+      ROUND(AVG(standard_price)::numeric, 2) AS standard_price,
+      ROUND(AVG(actual_price)::numeric, 2) AS actual_price,
+      ROUND(SUM(quantity)::numeric, 0) AS quantity
+    FROM base
+    GROUP BY date_value
+    ORDER BY date_value;
   `;
   const { rows } = await query(sql, [supplier_id, start_date, end_date]);
   return rows;
@@ -810,19 +960,26 @@ const getSAQTableData = async (supplier_id, start_date, end_date) => {
 
 const getSAQQuantityData = async (supplier_id, start_date, end_date) => {
   const sql = `
-    SELECT 
-      pfm.forecast_month AS date_value,
-      pq.quantity
-    FROM ppv_forecast_monthly pfm
-    JOIN purchase_quantities pq ON (
-      pq.supplier_id = pfm.supplier_id
-      AND pq.plant_id = pfm.plant_id
-      AND pq.sku_id = pfm.sku_id
-      AND pq.forecast_month = pfm.forecast_month
+    WITH base AS (
+      SELECT 
+        pfm.forecast_month::date AS date_value,
+        pq.quantity
+      FROM ppv_forecast_monthly pfm
+      JOIN purchase_quantities pq ON (
+        pq.supplier_id = pfm.supplier_id
+        AND pq.plant_id = pfm.plant_id
+        AND pq.sku_id = pfm.sku_id
+        AND pq.forecast_month = pfm.forecast_month
+      )
+      WHERE pfm.supplier_id = $1
+        AND pfm.forecast_month BETWEEN $2 AND $3
     )
-    WHERE pfm.supplier_id = $1
-      AND pfm.forecast_month BETWEEN $2 AND $3
-    ORDER BY pfm.forecast_month;
+    SELECT 
+      date_value,
+      ROUND(SUM(quantity)::numeric, 2) AS quantity
+    FROM base
+    GROUP BY date_value
+    ORDER BY date_value;
   `;
   const { rows } = await query(sql, [supplier_id, start_date, end_date]);
   return rows;
@@ -883,6 +1040,8 @@ const getScorecardFactorsById = async (scorecardId) => {
   return result.rows;
 };
 
+
+// Get market metric trends for a supplier
 // If metricName is passed -> filter; else return all metrics for that supplier
 const getMarketMetricTrendsBySupplier = async (supplierId, metricName) => {
   if (!supplierId) return [];
@@ -909,6 +1068,51 @@ const getMarketMetricTrendsBySupplier = async (supplierId, metricName) => {
   return result.rows;
 };
 
+const getForecastExplainability = async (supplierId) => {
+  if (!supplierId) return [];
+
+  const sql = `
+    SELECT 
+      sf.category,
+      sf.factor_name,
+      sf.factor_value,
+      sf.factor_weight,
+      sf.factor_impact,
+      CASE 
+        WHEN sf.category = 'Financial' THEN 'Quantity'
+        WHEN sf.category = 'Environmental & Social' THEN 'Raw Material - Rubber / Polymer Cost in ($)'
+        WHEN sf.category = 'Regulatory & Legal' THEN 
+          CASE 
+            WHEN s.supplier_country = 'USA' THEN 'Fuel Cost (WTI) in $'
+            ELSE 'Fuel Cost (Brent) in $'
+          END
+        WHEN sf.category = 'Operational' THEN 
+          CASE 
+            WHEN s.supplier_country = 'USA' THEN 'Exchange Rate Dollar/Euro'
+            WHEN s.supplier_country = 'China' THEN 'Exchange Rate Dollar/Yuan'
+            WHEN s.supplier_country = 'India' THEN 'Exchange Rate Dollar/Rupee'
+          END
+      END as chart_section
+    FROM scorecard_factors sf
+    JOIN supplier_scorecards ss ON ss.scorecard_id = sf.scorecard_id
+    JOIN suppliers s ON s.supplier_id = ss.supplier_id
+    WHERE ss.supplier_id = $1
+    ORDER BY 
+      CASE sf.category
+        WHEN 'Financial' THEN 1
+        WHEN 'Environmental & Social' THEN 2
+        WHEN 'Regulatory & Legal' THEN 3
+        WHEN 'Operational' THEN 4
+      END,
+      sf.factor_value DESC;
+  `;
+
+  const { rows } = await query(sql, [Number(supplierId)]);
+  return rows;
+};
+
+
+// Get Quantity trend for a specific supplier
 const getQuantityTrendBySupplier = async (supplierId) => {
   if (!supplierId) return [];
 
@@ -917,10 +1121,10 @@ const getQuantityTrendBySupplier = async (supplierId) => {
     SELECT 
       trend_date AS date_value,
       value AS y_value,
-      is_forecast, 
-      metric_name
+      is_forecast
     FROM market_metric_trends
     WHERE supplier_id = $1
+      AND metric_name = 'Quantity'
     ORDER BY trend_date
     `,
     [supplierId]
@@ -1026,7 +1230,9 @@ module.exports = {
   getAllSupplierLocation,
   getSupplierSavingsLast6Months,
   getLineChart,
+  getWeeklyLineChart,
   getHeatMap,
+  getWeeklyHeatMap,
   getAlerts,
   getGlobalEvents,
   getAllSuppliersData,
@@ -1037,6 +1243,7 @@ module.exports = {
   getSupplierScorecards,
   getScorecardFactorsById,
   getMarketMetricTrendsBySupplier,
+  getForecastExplainability,
   getActiveScoringConfigurations,
   getBottomMarketTrends,
   getScoreCategories,
