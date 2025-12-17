@@ -76,6 +76,16 @@ router.post("/suppliers/by-sku", async (req, res) => {
   }
 });
 
+
+
+// router.get("/getLineChart", async (req, res) => {
+//   try {
+//     const data = await service.getLineChart();
+//     res.json(data);
+//   } catch (err) {
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
 function isISODate(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
@@ -141,6 +151,51 @@ router.post('/getWeeklyLineChart', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+// router.post('/getLineChart', async (req, res) => {
+//   try {
+//     const { startDate, endDate, skuId, skuIds } = req.body || {};
+
+//     const payload = {};
+
+//     // date validation (existing)
+//     if (startDate) {
+//       if (!isISODate(startDate)) {
+//         return res.status(400).json({ error: 'Invalid startDate. Use YYYY-MM-DD.' });
+//       }
+//       payload.startDate = startDate;
+//     }
+//     if (endDate) {
+//       if (!isISODate(endDate)) {
+//         return res.status(400).json({ error: 'Invalid endDate. Use YYYY-MM-DD.' });
+//       }
+//       payload.endDate = endDate;
+//     }
+//     if (payload.startDate && payload.endDate && payload.startDate > payload.endDate) {
+//       return res.status(400).json({ error: 'startDate must be <= endDate.' });
+//     }
+
+//     // SKU validation (new)
+//     // Accept either a single skuId or an array skuIds
+//     if (skuIds !== undefined) {
+//       if (!Array.isArray(skuIds) || skuIds.some(v => isNaN(parseInt(v, 10)))) {
+//         return res.status(400).json({ error: 'skuIds must be an array of integers.' });
+//       }
+//       payload.skuIds = skuIds.map(v => parseInt(v, 10));
+//     } else if (skuId !== undefined) {
+//       const parsed = parseInt(skuId, 10);
+//       if (Number.isNaN(parsed)) {
+//         return res.status(400).json({ error: 'skuId must be an integer.' });
+//       }
+//       payload.skuId = parsed;
+//     }
+
+//     const data = await service.getLineChart(payload);
+//     res.json(data);
+//   } catch (err) {
+//     console.error('[POST] /getLineChart failed:', err);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
 
 
 router.post("/getHeatMap", async (req, res) => {
@@ -179,7 +234,16 @@ router.get("/getGlobalEvents", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+// Get Routes for Compare Models
+// router.get("/getDsModelData", getDsModelData);
+// router.get("/getDsModelFeaturesData", getDsModelsFeaturesData);
+// router.get("/getDsModelMetricsData", getDsModelMetricsData);
+// router.get("/getFvaVsStatsData", getFvaVsStatsData);
 
+// POST routes
+// router.post("/forecast-test", getForecastDataController);
+
+// Relationship-based routes
 router.post("/states-by-country", async (req, res) => {
   try {
     const { countryIds } = req.body;
