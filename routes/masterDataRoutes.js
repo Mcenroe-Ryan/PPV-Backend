@@ -18,12 +18,10 @@ const {
   getAllAlertsAndErrorsData,
   getAlertCountData,
   updateAlertsStrikethroughController,
-  //compare model
   getDsModelData,
   getDsModelsFeaturesData,
   getDsModelMetricsData,
   getFvaVsStatsData,
-
   getAllSupplierData,
   getAllSupplierLocationData,
   getSAQChartDataController,
@@ -33,7 +31,6 @@ const {
 } = require("../controllers/masterController");
 const service = require("../service/masterService");
 
-// Basic GET routes
 router.get("/getAllSuppliers", getAllSupplierData);
 router.get("/getAllCategories", getAllCategoriesData);
 router.get("/getAllSupplierLocation", getAllSupplierLocationData);
@@ -76,16 +73,6 @@ router.post("/suppliers/by-sku", async (req, res) => {
   }
 });
 
-
-
-// router.get("/getLineChart", async (req, res) => {
-//   try {
-//     const data = await service.getLineChart();
-//     res.json(data);
-//   } catch (err) {
-//     res.status(500).json({ error: "Internal server error" });
-//   }
-// });
 function isISODate(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
@@ -94,7 +81,6 @@ router.post('/getLineChart', async (req, res) => {
   try {
     const { startDate, endDate } = req.body || {};
 
-    // Optional validation – if provided, they must be ISO dates
     const payload = {};
     if (startDate) {
       if (!isISODate(startDate)) {
@@ -109,12 +95,11 @@ router.post('/getLineChart', async (req, res) => {
       payload.endDate = endDate;
     }
 
-    // Optional ordering check if both present
     if (payload.startDate && payload.endDate && payload.startDate > payload.endDate) {
       return res.status(400).json({ error: 'startDate must be <= endDate.' });
     }
 
-    const data = await service.getLineChart(payload); // service applies defaults if missing
+    const data = await service.getLineChart(payload); 
     res.json(data);
   } catch (err) {
     console.error('[POST] /getLineChart failed:', err);
@@ -151,52 +136,6 @@ router.post('/getWeeklyLineChart', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// router.post('/getLineChart', async (req, res) => {
-//   try {
-//     const { startDate, endDate, skuId, skuIds } = req.body || {};
-
-//     const payload = {};
-
-//     // date validation (existing)
-//     if (startDate) {
-//       if (!isISODate(startDate)) {
-//         return res.status(400).json({ error: 'Invalid startDate. Use YYYY-MM-DD.' });
-//       }
-//       payload.startDate = startDate;
-//     }
-//     if (endDate) {
-//       if (!isISODate(endDate)) {
-//         return res.status(400).json({ error: 'Invalid endDate. Use YYYY-MM-DD.' });
-//       }
-//       payload.endDate = endDate;
-//     }
-//     if (payload.startDate && payload.endDate && payload.startDate > payload.endDate) {
-//       return res.status(400).json({ error: 'startDate must be <= endDate.' });
-//     }
-
-//     // SKU validation (new)
-//     // Accept either a single skuId or an array skuIds
-//     if (skuIds !== undefined) {
-//       if (!Array.isArray(skuIds) || skuIds.some(v => isNaN(parseInt(v, 10)))) {
-//         return res.status(400).json({ error: 'skuIds must be an array of integers.' });
-//       }
-//       payload.skuIds = skuIds.map(v => parseInt(v, 10));
-//     } else if (skuId !== undefined) {
-//       const parsed = parseInt(skuId, 10);
-//       if (Number.isNaN(parsed)) {
-//         return res.status(400).json({ error: 'skuId must be an integer.' });
-//       }
-//       payload.skuId = parsed;
-//     }
-
-//     const data = await service.getLineChart(payload);
-//     res.json(data);
-//   } catch (err) {
-//     console.error('[POST] /getLineChart failed:', err);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// });
-
 
 router.post("/getHeatMap", async (req, res) => {
   try {
@@ -226,6 +165,27 @@ router.get("/getAlerts", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+router.get("/alerts/monthly-ppv", async (_req, res) => {
+  try {
+    const data = await service.getMonthlyPPVAlerts();
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching monthly PPV alerts:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/alerts/weekly-ppv", async (_req, res) => {
+  try {
+    const data = await service.getWeeklyPPVAlerts();
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching weekly PPV alerts:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/getGlobalEvents", async (req, res) => {
   try {
     const data = await service.getGlobalEvents();
@@ -234,16 +194,7 @@ router.get("/getGlobalEvents", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-// Get Routes for Compare Models
-// router.get("/getDsModelData", getDsModelData);
-// router.get("/getDsModelFeaturesData", getDsModelsFeaturesData);
-// router.get("/getDsModelMetricsData", getDsModelMetricsData);
-// router.get("/getFvaVsStatsData", getFvaVsStatsData);
 
-// POST routes
-// router.post("/forecast-test", getForecastDataController);
-
-// Relationship-based routes
 router.post("/states-by-country", async (req, res) => {
   try {
     const { countryIds } = req.body;
@@ -347,7 +298,6 @@ router.post("/forecastAlerts", async (req, res) => {
   }
 });
 
-// Consensus forecast update
 router.put("/forecast/consensus", async (req, res) => {
   try {
     const result = await service.updateConsensusForecast(req.body);
@@ -372,87 +322,6 @@ router.put("/forecast/consensus", async (req, res) => {
   }
 });
 
-// Generate data for both countries
-// In routes, replace the generate/all route section:
-// router.post("/generate/all", async (req, res) => {
-//   try {
-//     console.log("Starting data generation for both countries...");
-
-//     const DataGenerationService = require("../service/dataGenerationService");
-//     const dataServiceInstance = new DataGenerationService();
-
-//     console.log("Clearing all existing data...");
-//     const totalCleared = await dataServiceInstance.clearTableData();
-//     console.log(`Cleared ${totalCleared} existing records`);
-
-//     const results = [];
-
-//     // Generate India data
-//     try {
-//       const indiaResult = await dataServiceInstance.generateData("India");
-//       results.push({
-//         country: "India",
-//         success: true,
-//         recordsGenerated: indiaResult.recordsCount,
-//         productsProcessed: indiaResult.productsCount,
-//         message: indiaResult.message,
-//       });
-//     } catch (error) {
-//       results.push({
-//         country: "India",
-//         success: false,
-//         error: error.message,
-//       });
-//     }
-
-//     // Generate USA data
-//     try {
-//       const usaResult = await dataServiceInstance.generateData("USA");
-//       results.push({
-//         country: "USA",
-//         success: true,
-//         recordsGenerated: usaResult.recordsCount,
-//         productsProcessed: usaResult.productsCount,
-//         message: usaResult.message,
-//       });
-//     } catch (error) {
-//       results.push({
-//         country: "USA",
-//         success: false,
-//         error: error.message,
-//       });
-//     }
-
-//     const allSuccessful = results.every((r) => r.success);
-//     const totalRecords = results.reduce(
-//       (sum, r) => sum + (r.recordsGenerated || 0),
-//       0
-//     );
-
-//     res.status(allSuccessful ? 200 : 207).json({
-//       success: allSuccessful,
-//       message: allSuccessful
-//         ? "Successfully cleared existing data and generated fresh data for both countries"
-//         : "Data generation completed with some errors",
-//       data: {
-//         totalRecords,
-//         clearedRecords: totalCleared,
-//         results,
-//         timestamp: new Date().toISOString(),
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Error in bulk data generation:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to generate data",
-//       error: error.message,
-//     });
-//   }
-// });
-
-// Generate data for both countries
-// In routes, replace the generate/all route section:
 router.post("/generate/all", async (req, res) => {
   try {
     console.log("Starting data generation for both countries...");
@@ -466,7 +335,6 @@ router.post("/generate/all", async (req, res) => {
 
     const results = [];
 
-    // Generate India data
     try {
       const indiaResult = await dataServiceInstance.generateData("India");
       results.push({
@@ -484,7 +352,6 @@ router.post("/generate/all", async (req, res) => {
       });
     }
 
-    // Generate USA data
     try {
       const usaResult = await dataServiceInstance.generateData("USA");
       results.push({
@@ -555,7 +422,6 @@ router.get(
   getForecastExplainabilityController
 );
 
-// Scorecards list
 router.get("/scorecards", async (req, res, next) => {
   try {
     const { scoreCategory, supplierId } = req.query;
@@ -569,7 +435,6 @@ router.get("/scorecards", async (req, res, next) => {
   }
 });
 
-// Factors by scorecard
 router.get("/scorecards/:scorecardId/factors", async (req, res, next) => {
   try {
     const data = await service.getScorecardFactorsById(Number(req.params.scorecardId));
@@ -579,7 +444,6 @@ router.get("/scorecards/:scorecardId/factors", async (req, res, next) => {
   }
 });
 
-// Supplier metric trends
 router.get(
   "/suppliers/:supplierId/market-metric-trends",
   async (req, res, next) => {
@@ -596,7 +460,6 @@ router.get(
   }
 );
 
-// Configs
 router.get("/scoring-configs/active", async (req, res, next) => {
   try {
     const data = await service.getActiveScoringConfigurations();
@@ -606,7 +469,6 @@ router.get("/scoring-configs/active", async (req, res, next) => {
   }
 });
 
-// Bottom trends
 router.get("/market-trends/bottom", async (req, res, next) => {
   try {
     const data = await service.getBottomMarketTrends();
@@ -616,7 +478,6 @@ router.get("/market-trends/bottom", async (req, res, next) => {
   }
 });
 
-// Scoring models dropdown
 router.get("/score-categories", async (req, res, next) => {
   try {
     const data = await service.getScoreCategories();

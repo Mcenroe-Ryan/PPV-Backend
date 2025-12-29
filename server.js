@@ -5,11 +5,10 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5002;
-const HOST = process.env.HOST || "0.0.0.0"; // Ensures it works on EC2
+const HOST = process.env.HOST || "0.0.0.0"; 
 
 const mainRoutes = require("./routes/masterDataRoutes");
 
-// CORS setup – allows local dev and production frontend
 const allowedOrigins = [
   "http://localhost:5173",
    process.env.FRONTEND_URL || "http://13.53.61.186:5002"
@@ -27,15 +26,12 @@ app.use(cors({
 
 app.use(express.json());
 
-// Routes
 app.use("/api", mainRoutes);
 
-// Health check
 app.get("/", (req, res) => {
-  res.send("✅ Backend API is running");
+  res.send("Backend API is running");
 });
 
-// Start server
 app.listen(PORT, HOST, () => {
-  console.log(`🚀 Server is running on http://${HOST}:${PORT}`);
+  console.log(`Server is running on http://${HOST}:${PORT}`);
 });

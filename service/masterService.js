@@ -34,7 +34,6 @@ const getAllSuppliersData = async (skuId) => {
   }
 };
 
-
 const getAllCities = async () => {
   try {
     const result = await query("select * from dim_city where state_id = 1");
@@ -105,9 +104,7 @@ const getSupplierSavingsLast6Months = async () => {
   }
 };
 
-
 const getLineChart = async ({ startDate, endDate }) => {
-  // fallback window if dates not provided
   const start = startDate || "2023-10-01";
   const end = endDate || "2025-09-01";
 
@@ -189,6 +186,101 @@ ORDER BY a.trigger_date DESC;
   }
 };
 
+const getMonthlyPPVAlerts = async () => {
+  const sql = `
+WITH current_month_ppv AS (
+    SELECT 
+        pfw.supplier_id,
+        s.supplier_name,
+        s.supplier_country,
+        COUNT(*) as total_weeks,
+        AVG(pfw.ppv_variance_percentage) as avg_variance_percentage,
+        SUM(pfw.ppv_variance_amount) as total_variance_amount,
+        MIN(pfw.ppv_variance_percentage) as min_variance_percentage,
+        MAX(pfw.ppv_variance_percentage) as max_variance_percentage
+    FROM 
+        public.ppv_forecast_weekly pfw
+    INNER JOIN 
+        public.suppliers s ON pfw.supplier_id = s.supplier_id
+    WHERE 
+        DATE_TRUNC('month', pfw.forecast_week) = DATE_TRUNC('month', CURRENT_DATE)
+        AND pfw.forecast_type = 'actual'
+    GROUP BY 
+        pfw.supplier_id, 
+        s.supplier_name,
+        s.supplier_country
+)
+SELECT 
+    supplier_id,
+    supplier_name,
+    supplier_country,
+    total_weeks,
+    ROUND(avg_variance_percentage, 2) as avg_variance_pct,
+    ROUND(total_variance_amount, 2) as total_variance_amt,
+    ROUND(min_variance_percentage, 2) as min_variance_pct,
+    ROUND(max_variance_percentage, 2) as max_variance_pct,
+    '🔴 NOT RECOMMENDED - Positive Variance' as alert_status
+FROM 
+    current_month_ppv
+WHERE 
+    avg_variance_percentage > 0
+ORDER BY 
+    avg_variance_percentage ASC;
+  `;
+
+  const { rows } = await query(sql);
+  return rows;
+};
+
+const getWeeklyPPVAlerts = async () => {
+  const sql = `
+WITH current_week_ppv AS (
+    SELECT 
+        pfw.supplier_id,
+        s.supplier_name,
+        s.supplier_country,
+        pfw.forecast_week,
+        AVG(pfw.ppv_variance_percentage) as avg_variance_percentage,
+        SUM(pfw.ppv_variance_amount) as total_variance_amount,
+        COUNT(DISTINCT pfw.sku_id) as affected_skus_count,
+        COUNT(DISTINCT pfw.plant_id) as affected_plants_count
+    FROM 
+        public.ppv_forecast_weekly pfw
+    INNER JOIN 
+        public.suppliers s ON pfw.supplier_id = s.supplier_id
+    WHERE 
+        DATE_TRUNC('week', pfw.forecast_week) = DATE_TRUNC('week', CURRENT_DATE)
+        AND pfw.forecast_type = 'actual'
+    GROUP BY 
+        pfw.supplier_id, 
+        s.supplier_name,
+        s.supplier_country,
+        pfw.forecast_week
+)
+SELECT 
+    supplier_id,
+    supplier_name,
+    supplier_country,
+    forecast_week as week_date,
+    EXTRACT(WEEK FROM forecast_week) as week_number,
+    EXTRACT(YEAR FROM forecast_week) as year,
+    affected_skus_count,
+    affected_plants_count,
+    ROUND(avg_variance_percentage, 2) as avg_variance_pct,
+    ROUND(total_variance_amount, 2) as total_variance_amt,
+    '🔴 NOT RECOMMENDED - Negative Variance' as alert_status
+FROM 
+    current_week_ppv
+WHERE 
+    avg_variance_percentage < 0
+ORDER BY 
+    avg_variance_percentage ASC;
+  `;
+
+  const { rows } = await query(sql);
+  return rows;
+};
+
 const getGlobalEvents = async () => {
   const sql = `
 SELECT 
@@ -212,8 +304,6 @@ ORDER BY ge.event_date DESC;
   }
 };
 
-
-// Accepts: { startDate, endDate, countryIds, stateIds, plantIds, skuIds, supplierIds, supplierLocations }
 const getHeatMap = async (payload = {}) => {
   const {
     startDate,
@@ -223,15 +313,12 @@ const getHeatMap = async (payload = {}) => {
     plantIds = [],
     skuIds = [],
     supplierIds = [],
-    supplierLocations = [], // array of country names (strings)
+    supplierLocations = [],
   } = payload;
 
-  // sensible fallbacks if FE didn't send dates
   const start = startDate || "2023-10-01";
   const end = endDate || "2026-12-01";
 
-  // NOTE: adapt joins to your schema if country/state live elsewhere.
-  // The idea is to keep every filter optional.
   const sql = `
     SELECT
       s.supplier_name,
@@ -267,17 +354,15 @@ const getHeatMap = async (payload = {}) => {
   try {
     const { rows } = await query(sql, params);
 
-    // Pivot in Node: one object per supplier with dynamic "Mon YYYY" keys
     const bySupplier = new Map();
     for (const r of rows) {
       if (!bySupplier.has(r.supplier_name)) {
         bySupplier.set(r.supplier_name, { supplier_name: r.supplier_name });
       }
       const obj = bySupplier.get(r.supplier_name);
-      obj[r.month_label] = r.pct; // e.g., "Apr 2026": 6.5
+      obj[r.month_label] = r.pct;
     }
 
-    // Return array of pivoted rows, sorted by supplier
     return Array.from(bySupplier.values()).sort((a, b) =>
       a.supplier_name.localeCompare(b.supplier_name)
     );
@@ -414,7 +499,6 @@ const getForecastData = async (filters) => {
   const values = [model_name, start_date, end_date];
   let idx = 4;
 
-  // Map incoming filter keys to DB column names
   const filterMap = {
     country: "country_name",
     state: "state_name",
@@ -469,7 +553,6 @@ const getWeekForecastData = async (filters) => {
   const values = [model_name, start_date, end_date];
   let idx = 4;
 
-  // Map incoming filter keys to DB column names
   const filterMap = {
     country: "country_name",
     state: "state_name",
@@ -526,7 +609,7 @@ const getAllCountries = async () => {
     throw err;
   }
 };
-// Get States by Country (accepts array of state_ids)
+
 const getStatesByCountry = async (countryIds) => {
   if (!countryIds || countryIds.length === 0) return [];
   const placeholders = countryIds.map((_, i) => `$${i + 1}`).join(", ");
@@ -537,7 +620,6 @@ const getStatesByCountry = async (countryIds) => {
   return result.rows;
 };
 
-// Get Cities by State (accepts array of state_ids)
 const getPlantsByStates = async (stateIds) => {
   if (!stateIds || stateIds.length === 0) return [];
   const placeholders = stateIds.map((_, i) => `$${i + 1}`).join(", ");
@@ -548,7 +630,6 @@ const getPlantsByStates = async (stateIds) => {
   return result.rows;
 };
 
-// Get Categories by Plant (accepts array of plant_ids)
 const getSkuByPlants = async (plantIds) => {
   if (!plantIds || plantIds.length === 0) return [];
   const placeholders = plantIds.map((_, i) => `$${i + 1}`).join(", ");
@@ -559,7 +640,6 @@ const getSkuByPlants = async (plantIds) => {
   return result.rows;
 };
 
-// Get Plants by City (accepts array of city_ids)
 const getPlantsByCities = async (cityIds) => {
   if (!cityIds || cityIds.length === 0) return [];
   const placeholders = cityIds.map((_, i) => `$${i + 1}`).join(", ");
@@ -570,7 +650,6 @@ const getPlantsByCities = async (cityIds) => {
   return result.rows;
 };
 
-// Get SKUs by Category (accepts array of category_ids)
 const getSkusByCategories = async (categoryIds) => {
   if (!categoryIds || categoryIds.length === 0) return [];
   const placeholders = categoryIds.map((_, i) => `$${i + 1}`).join(", ");
@@ -595,19 +674,15 @@ const updateConsensusForecast = async (payload) => {
     "model_name",
   ];
 
-  // 1. Validate required fields
   for (const param of requiredParams) {
     if (!(param in payload)) {
       console.error(`Missing required parameter: ${param}`);
       throw new Error(`Missing required parameter: ${param}`);
     }
   }
-
-  // 2. Parse and validate target_month, then convert to month-end
   let targetMonth;
 
   if (dayjs(payload.target_month, "YYYY-MM-DD", true).isValid()) {
-    // Convert beginning of month to end of month since backend stores month-end dates
     targetMonth = dayjs(payload.target_month, "YYYY-MM-DD")
       .endOf("month")
       .format("YYYY-MM-DD");
@@ -619,7 +694,6 @@ const updateConsensusForecast = async (payload) => {
     throw new Error("target_month must be in 'YYYY-MM-DD' format");
   }
 
-  // 3. Validate and parse consensus_forecast
   const consensusValue = Number(payload.consensus_forecast);
   if (isNaN(consensusValue)) {
     console.error(
@@ -629,7 +703,7 @@ const updateConsensusForecast = async (payload) => {
     throw new Error("consensus_forecast must be a valid number");
   }
 
-  const model_name = payload.model_name || "XGBoost"; // Default fallback
+  const model_name = payload.model_name || "XGBoost";
   const arr = (v) => (Array.isArray(v) ? v : [v]);
 
   const params = [
@@ -641,11 +715,10 @@ const updateConsensusForecast = async (payload) => {
     arr(payload.category_name),
     arr(payload.sku_code),
     arr(payload.channel_name),
-    model_name, //
+    model_name,
     targetMonth,
   ];
 
-  // 5. SQL query (unchanged)
   const sql = `
     UPDATE public.demand_forecast
     SET consensus_forecast = $1
@@ -661,8 +734,7 @@ const updateConsensusForecast = async (payload) => {
   `;
   try {
     const result = await query(sql, params);
-    console.table(result.rows); // see exactly which rows changed and how
-
+    console.table(result.rows);
     return {
       success: true,
       message: `Updated ${result.rowCount} record(s) for consensus_forecast using model: ${model_name}.`,
@@ -744,7 +816,6 @@ const getForecastAlertData = async (filters) => {
   return result.rows;
 };
 
-//compare model queries
 const getDsModels = async () => {
   try {
     const result = await query("select * from ds_model");
@@ -790,7 +861,6 @@ const alertCountService = async () => {
     const result = await query(
       "SELECT COUNT(*) AS error_count FROM forecast_error WHERE error_type = 'error'"
     );
-    // result.rows[0].error_count will be the count as a string, so convert to number if needed
     return Number(result.rows[0].error_count);
   } catch (err) {
     console.error("Database error:", err);
@@ -810,50 +880,6 @@ const updateAlertsStrikethroughService = async (id, is_checked) => {
 
   return result.rows[0];
 };
-
-// const getSAQChartData = async (supplier_id, start_date, end_date) => {
-//   let effectiveSupplierId = Number(supplier_id);
-
-//   if (!Number.isFinite(effectiveSupplierId) || effectiveSupplierId <= 0) {
-//     effectiveSupplierId = 7;
-//   }
-
-//   const sql = `
-//     SELECT 
-//       pfm.forecast_month AS date_value,
-//       sp.standard_price,
-//       (sp.standard_price + pfm.ppv_variance_amount) AS actual_price,
-//       pq.quantity
-//     FROM ppv_forecast_monthly pfm
-//     JOIN standard_prices sp ON (
-//       sp.supplier_id = pfm.supplier_id 
-//       AND sp.plant_id = pfm.plant_id 
-//       AND sp.sku_id = pfm.sku_id
-//       AND sp.effective_date <= pfm.forecast_month
-//     )
-//     JOIN purchase_quantities pq ON (
-//       pq.supplier_id = pfm.supplier_id
-//       AND pq.plant_id = pfm.plant_id
-//       AND pq.sku_id = pfm.sku_id
-//       AND pq.forecast_month = pfm.forecast_month
-//     )
-//     WHERE pfm.supplier_id = $1
-//       AND pfm.forecast_month BETWEEN $2 AND $3
-//     ORDER BY pfm.forecast_month;
-//   `;
-
-//   try {
-//     const { rows } = await query(sql, [
-//       effectiveSupplierId,
-//       start_date,
-//       end_date,
-//     ]);
-
-//     return rows;
-//   } catch (error) {
-//     throw error;
-//   }
-// };
 
 const getSAQChartData = async (supplier_id, start_date, end_date) => {
   let effectiveSupplierId = Number(
@@ -914,7 +940,6 @@ const getSAQChartData = async (supplier_id, start_date, end_date) => {
     throw error;
   }
 };
-
 
 const getSAQTableData = async (supplier_id, start_date, end_date) => {
   const sql = `
@@ -985,7 +1010,6 @@ const getSAQQuantityData = async (supplier_id, start_date, end_date) => {
   return rows;
 };
 
-// Get supplier scorecards (filter by scoreCategory + optional supplierId)
 const getSupplierScorecards = async (scoreCategory, supplierId) => {
   const params = [];
   let sql = `
@@ -1020,7 +1044,6 @@ const getSupplierScorecards = async (scoreCategory, supplierId) => {
   return result.rows;
 };
 
-// Get factor contributions for a given scorecard_id
 const getScorecardFactorsById = async (scorecardId) => {
   if (!scorecardId) return [];
 
@@ -1040,29 +1063,60 @@ const getScorecardFactorsById = async (scorecardId) => {
   return result.rows;
 };
 
-
-// Get market metric trends for a supplier
-// If metricName is passed -> filter; else return all metrics for that supplier
 const getMarketMetricTrendsBySupplier = async (supplierId, metricName) => {
   if (!supplierId) return [];
 
   const params = [supplierId];
-  let sql = `
-    SELECT 
-      trend_date AS date_value,
-      value AS y_value,
-      is_forecast,
-      metric_name
-    FROM market_metric_trends
-    WHERE supplier_id = $1
-  `;
+  let filterClause = "";
+
+  const metricPatterns = {
+    "fuel cost (brent)": ["fuel cost (brent)%", "fuel cost brent%"],
+    "fuel cost (brent) in $": ["fuel cost (brent)%", "fuel cost brent%"],
+    "fuel cost (wti)": ["fuel cost (wti)%", "fuel cost wti%"],
+    "fuel cost (wti) in $": ["fuel cost (wti)%", "fuel cost wti%"],
+    "exchange rate dollar/euro": [
+      "exchange rate dollar/euro%",
+      "exchange rate dollar euro%",
+    ],
+    "exchange rate dollar/yuan": [
+      "exchange rate dollar/yuan%",
+      "exchange rate dollar yuan%",
+    ],
+    "exchange rate dollar/rupee": [
+      "exchange rate dollar/rupee%",
+      "exchange rate dollar rupee%",
+    ],
+    "raw material - rubber / polymer cost in ($)": [
+      "raw material - rubber / polymer cost%",
+      "raw material - rubber cost%",
+    ],
+    quantity: ["quantity"],
+  };
 
   if (metricName) {
-    params.push(metricName);
-    sql += ` AND metric_name = $${params.length}`;
+    const key = metricName.toLowerCase().trim();
+    const patterns = metricPatterns[key] || [`${key}%`];
+    params.push(patterns);
+    filterClause = ` AND metric_key LIKE ANY($${params.length})`;
   }
 
-  sql += ` ORDER BY metric_name, trend_date`;
+  const sql = `
+    WITH mm AS (
+      SELECT 
+        trend_date AS date_value,
+        value AS y_value,
+        is_forecast,
+        metric_name,
+        LOWER(TRIM(metric_name)) AS metric_key
+      FROM market_metric_trends
+      WHERE supplier_id = $1
+    )
+    SELECT date_value, y_value, is_forecast, metric_name
+    FROM mm
+    WHERE 1=1
+    ${filterClause}
+    ORDER BY metric_key, date_value
+  `;
 
   const result = await query(sql, params);
   return result.rows;
@@ -1111,8 +1165,6 @@ const getForecastExplainability = async (supplierId) => {
   return rows;
 };
 
-
-// Get Quantity trend for a specific supplier
 const getQuantityTrendBySupplier = async (supplierId) => {
   if (!supplierId) return [];
 
@@ -1133,8 +1185,6 @@ const getQuantityTrendBySupplier = async (supplierId) => {
   return result.rows;
 };
 
-
-// Get active scoring configurations
 const getActiveScoringConfigurations = async () => {
   const result = await query(
     `
@@ -1155,8 +1205,6 @@ const getActiveScoringConfigurations = async () => {
   return result.rows;
 };
 
-
-// Get bottom-row market trends for fixed metrics
 const getBottomMarketTrends = async () => {
   const result = await query(
     `
@@ -1179,7 +1227,6 @@ const getBottomMarketTrends = async () => {
   return result.rows;
 };
 
-// Get distinct scoring categories for dropdown
 const getScoreCategories = async () => {
   const result = await query(
     `
@@ -1195,9 +1242,7 @@ const getScoreCategories = async () => {
   return result.rows;
 };
 
-
 module.exports = {
-  // demand_planning code
   getAllCategories,
   getAllCities,
   getAllPlants,
@@ -1218,12 +1263,10 @@ module.exports = {
   alertCountService,
   updateAlertsStrikethroughService,
   getWeekForecastData,
-  //compare model
   getDsModels,
   getDsModelsFeatures,
   getDsModelMetrics,
   getFvaVsStats,
-
   getPlantsByStates,
   getSkuByPlants,
   getAllSuppliers,
@@ -1234,12 +1277,13 @@ module.exports = {
   getHeatMap,
   getWeeklyHeatMap,
   getAlerts,
+  getMonthlyPPVAlerts,
+  getWeeklyPPVAlerts,
   getGlobalEvents,
   getAllSuppliersData,
   getSAQChartData,
   getSAQTableData,
   getSAQQuantityData,
-
   getSupplierScorecards,
   getScorecardFactorsById,
   getMarketMetricTrendsBySupplier,
@@ -1247,5 +1291,5 @@ module.exports = {
   getActiveScoringConfigurations,
   getBottomMarketTrends,
   getScoreCategories,
-  getQuantityTrendBySupplier
+  getQuantityTrendBySupplier,
 };

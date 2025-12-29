@@ -17,7 +17,6 @@ const {
   getAllAlertsAndErrors,
   alertCountService,
   updateAlertsStrikethroughService,
-  //compare model
   getDsModels,
   getDsModelsFeatures,
   getDsModelMetrics,
@@ -28,6 +27,8 @@ const {
   getSAQTableData,
   getSAQQuantityData,
   getForecastExplainability,
+  getMonthlyPPVAlerts,
+  getWeeklyPPVAlerts,
 } = require("../service/masterService");
 
 const getAllSupplierData = async (req, res) => {
@@ -129,7 +130,6 @@ const getAllAlertsAndErrorsData = async (req, res) => {
   }
 };
 
-// GET /states?country_id=1
 const fetchStates = async (req, res) => {
   try {
     const { country_id } = req.query;
@@ -140,7 +140,7 @@ const fetchStates = async (req, res) => {
     res.status(500).send("Error fetching states");
   }
 };
-// GET /cities?state_id=1
+
 const fetchCities = async (req, res) => {
   try {
     const { state_id } = req.query;
@@ -152,7 +152,6 @@ const fetchCities = async (req, res) => {
   }
 };
 
-// GET /plants?city_id=1
 const fetchPlants = async (req, res) => {
   try {
     const { city_id } = req.query;
@@ -164,7 +163,6 @@ const fetchPlants = async (req, res) => {
   }
 };
 
-// GET /categories?plant_id=1
 const fetchCategories = async (req, res) => {
   try {
     const { plant_id } = req.query;
@@ -176,7 +174,6 @@ const fetchCategories = async (req, res) => {
   }
 };
 
-// GET /skus?category_id=1
 const fetchSkus = async (req, res) => {
   try {
     const { category_id } = req.query;
@@ -188,7 +185,6 @@ const fetchSkus = async (req, res) => {
   }
 };
 
-// GET /forecast?country_name=India&state_name=...&start_date=...&end_date=...
 const fetchForecastData = async (req, res) => {
   try {
     const filters = req.query;
@@ -199,6 +195,7 @@ const fetchForecastData = async (req, res) => {
     res.status(500).send("Error fetching forecast data");
   }
 };
+
 const getForecastDataController = async (req, res) => {
   try {
     const data = await getForecastDataForTest();
@@ -292,8 +289,6 @@ const updateAlertsStrikethroughController = async (req, res) => {
 const getSAQChartDataController = async (req, res) => {
   try {
     const { supplier_id, start_date, end_date } = req.body;
-
-    // Input validation
     if (!supplier_id || !start_date || !end_date) {
       return res.status(400).json({
         error: "Missing required parameters: supplier_id, start_date, end_date",
@@ -306,7 +301,6 @@ const getSAQChartDataController = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
 
 const getSAQTableDataController = async (req, res) => {
   try {
@@ -350,6 +344,26 @@ const getForecastExplainabilityController = async (req, res) => {
   }
 };
 
+const getCurrentMonthNegativePpvController = async (_req, res) => {
+  try {
+    const data = await getMonthlyPPVAlerts();
+    res.json(data);
+  } catch (err) {
+    console.error("Error in getCurrentMonthNegativePpvController:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const getCurrentWeekNegativePpvController = async (_req, res) => {
+  try {
+    const data = await getWeeklyPPVAlerts();
+    res.json(data);
+  } catch (err) {
+    console.error("Error in getCurrentWeekNegativePpvController:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   getAllCountriesData,
   getAllCitiesData,
@@ -369,16 +383,16 @@ module.exports = {
   getAllAlertsAndErrorsData,
   getAlertCountData,
   updateAlertsStrikethroughController,
-  //Compare models
   getDsModelData,
   getDsModelsFeaturesData,
   getDsModelMetricsData,
   getFvaVsStatsData,
-
   getAllSupplierData,
   getAllSupplierLocationData,
   getSAQChartDataController,
   getSAQTableDataController,
   getSAQQuantityDataController,
-  getForecastExplainabilityController
+  getForecastExplainabilityController,
+  getCurrentMonthNegativePpvController,
+  getCurrentWeekNegativePpvController,
 };
