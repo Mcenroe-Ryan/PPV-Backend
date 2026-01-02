@@ -203,7 +203,7 @@ WITH current_month_ppv AS (
     INNER JOIN 
         public.suppliers s ON pfw.supplier_id = s.supplier_id
     WHERE 
-        DATE_TRUNC('month', pfw.forecast_week) = DATE_TRUNC('month', CURRENT_DATE)
+        DATE_TRUNC('month', pfw.forecast_week) = DATE_TRUNC('month', CURRENT_DATE  - INTERVAL '1 month')
         AND pfw.forecast_type = 'actual'
     GROUP BY 
         pfw.supplier_id, 
